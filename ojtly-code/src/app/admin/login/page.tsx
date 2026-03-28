@@ -2,10 +2,33 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // 1. Import useRouter
 
 export default function AdminLogin() {
+  const router = useRouter(); // 2. Initialize the router
   const [showPassword, setShowPassword] = useState(false);
   const [showSecurityKey, setShowSecurityKey] = useState(false);
+
+  // 3. State for inputs (initialized with empty strings)
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [securityKey, setSecurityKey] = useState('');
+
+  // 4. Create the submit handler
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault(); // Prevent page refresh
+    
+    // Optional: You can add validation here
+    if (!username || !password || !securityKey) {
+      alert("Please fill in all fields.");
+      return;
+    }
+
+    console.log("Admin Login Attempt:", { username, password, securityKey });
+    
+    // Redirect to Admin Dashboard
+    router.push('/admin_main'); 
+  };
 
   return (
     <div className="min-h-screen flex font-sans bg-gray-900">
@@ -58,14 +81,22 @@ export default function AdminLogin() {
           </div>
 
           <div className="bg-gray-800/50 p-8 rounded-3xl border border-gray-700 backdrop-blur-sm shadow-2xl">
-            <form className="space-y-5">
+            {/* 5. Attach handleSubmit to form */}
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Username</label>
                 <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-500">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                     </span>
-                    <input placeholder='Username' type="text" className="w-full pl-12 pr-4 py-3.5 bg-gray-900 border border-gray-600 rounded-xl text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition placeholder-gray-500" required />
+                    <input 
+                      placeholder='Username' 
+                      type="text" 
+                      className="w-full pl-12 pr-4 py-3.5 bg-gray-900 border border-gray-600 rounded-xl text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition placeholder-gray-500" 
+                      required 
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                    />
                 </div>
               </div>
 
@@ -80,6 +111,8 @@ export default function AdminLogin() {
                         placeholder='Password'
                         className="w-full pl-12 pr-12 py-3.5 bg-gray-900 border border-gray-600 rounded-xl text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition placeholder-gray-500" 
                         required 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                     />
                     <button 
                         type="button" 
@@ -106,6 +139,8 @@ export default function AdminLogin() {
                     placeholder='Security Key'
                     className="w-full pl-12 pr-12 py-3.5 bg-gray-900 border border-gray-600 rounded-xl text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition placeholder-gray-500" 
                     required 
+                    value={securityKey}
+                    onChange={(e) => setSecurityKey(e.target.value)}
                   />
                   <button 
                     type="button" 
@@ -129,7 +164,7 @@ export default function AdminLogin() {
 
           <p className="text-center text-gray-500 text-sm pb-8">
             Need an account?{' '}
-            <Link href="/admin/register" className="font-semibold text-red-500 hover:text-red-400 hover:underline">
+            <Link href="/admin_main" className="font-semibold text-red-500 hover:text-red-400 hover:underline">
               Request Access
             </Link>
           </p>

@@ -2,9 +2,25 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function CompanyLogin() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  
+  // State for inputs (initialized with empty strings to prevent errors)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Submit handler
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault(); // Prevent page refresh
+    
+    console.log("Logging in with:", { email, password });
+    
+    // Redirect to Company Main Page
+    router.push('/company_main');
+  };
 
   return (
     <div className="min-h-screen flex font-sans">
@@ -54,18 +70,20 @@ export default function CompanyLogin() {
           </div>
 
           <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100">
-            <form className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email or Username</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                   </span>
                   <input 
-                    type="text" 
+                    type="email" 
                     placeholder="company@example.com" 
                     className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition" 
                     required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
               </div>
@@ -81,6 +99,8 @@ export default function CompanyLogin() {
                     placeholder='Password'
                     className="w-full pl-12 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition" 
                     required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                   />
                   <button 
                     type="button" 

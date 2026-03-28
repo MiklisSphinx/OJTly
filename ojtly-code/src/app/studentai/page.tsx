@@ -1,124 +1,163 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-export default function StudentAIPage() {
-  const router = useRouter();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+type Message = {
+  id: number;
+  text: string;
+  sender: 'user' | 'ai';
+};
 
-  const handleLogout = () => {
-    router.push('/');
+export default function AIChatbot() {
+  const router = useRouter();
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, text: "Hello! 👋 I am your OJT Assistant. I can help you find internships, review your resume, or answer questions about the platform. How can I help you today?", sender: 'ai' }
+  ]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new message arrives
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = () => {
+    if (!input.trim()) return;
+
+    // 1. Add User Message
+    const userMessage: Message = { id: Date.now(), text: input, sender: 'user' };
+    setMessages((prev) => [...prev, userMessage]);
+    const currentInput = input;
+    setInput('');
+    
+    // 2. Simulate AI Thinking
+    setIsTyping(true);
+
+    // 3. Generate Mock AI Response
+    setTimeout(() => {
+      const aiResponse = generateResponse(currentInput);
+      setMessages((prev) => [...prev, { id: Date.now() + 1, text: aiResponse, sender: 'ai' }]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  // Mock Logic for Demo
+  const generateResponse = (query: string): string => {
+    const q = query.toLowerCase();
+    if (q.includes('resume') || q.includes('cv')) {
+      return "A great resume for OJT should highlight your projects and skills relevant to the job. Would you like me to list the key sections you need?";
+    }
+    if (q.includes('find') || q.includes('job')) {
+      return "You can use the 'Find OJT' page to search for jobs. Try filtering by 'Remote' or 'On-Site' to narrow your search. Want me to explain how the KNN algorithm recommends jobs?";
+    }
+    if (q.includes('hello') || q.includes('hi')) {
+      return "Hi there! Ready to find your dream internship?";
+    }
+    if (q.includes('interview')) {
+      return "For interviews, be sure to research the company and prepare answers for common behavioral questions. Confidence is key!";
+    }
+    return "I am currently a demo bot. In a full version, I would be connected to OpenAI or a database to answer complex questions. For now, try asking about 'resume' or 'interview'!";
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 font-sans overflow-x-hidden flex flex-col">
-      {/* Navigation */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-lg border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/student_main" className="flex items-center gap-2 text-xl font-bold text-white">
-            <span className="text-cyan-400 text-2xl">◉</span> 
-            <span>OJTly <span className="text-cyan-400">A.I.</span></span>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-1 bg-white/5 p-1 rounded-full">
-            <Link href="/student_main" className="px-4 py-1.5 text-sm font-medium text-slate-300 rounded-full hover:bg-white/10">Find OJT</Link>
-            <Link href="/map" className="px-4 py-1.5 text-sm font-medium text-slate-300 rounded-full hover:bg-white/10">Map</Link>
-            <Link href="/student_main/studentai" className="px-4 py-1.5 text-sm font-medium bg-cyan-500/20 text-cyan-300 rounded-full">A.I Chat Bot</Link>
-          </nav>
-
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/profile" className="flex items-center gap-2 text-sm font-medium text-slate-300 hover:text-white">
-              <div className="w-9 h-9 bg-gradient-to-tr from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white shadow-md">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-              </div>
-              <span className="hidden sm:inline font-semibold">Profile</span>
+    <div className="flex flex-col h-screen bg-slate-100 font-sans">
+      
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm h-16 flex-shrink-0">
+        <div className="max-w-4xl mx-auto px-4 h-full flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/student_main" className="p-2 -ml-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
             </Link>
-            <button onClick={handleLogout} className="px-4 py-2 bg-transparent border border-slate-700 text-slate-300 text-sm font-semibold rounded-lg hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400">Log out</button>
-          </div>
-
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden p-2 rounded-lg text-slate-300 hover:bg-slate-800">
-            {isMobileMenuOpen ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-            )}
-          </button>
-        </div>
-
-        {isMobileMenuOpen && (
-          <div className="md:hidden absolute top-16 inset-x-0 bg-slate-900 border-b border-slate-800 shadow-lg z-40">
-            <div className="px-4 py-4 space-y-3">
-              <Link href="/jobs" className="block px-4 py-2 text-base font-medium text-slate-300 hover:bg-slate-800 rounded-lg">Find OJT</Link>
-              <Link href="/map" className="block px-4 py-2 text-base font-medium text-slate-300 hover:bg-slate-800 rounded-lg">Map</Link>
-              <Link href="/student_main/studentai" className="block px-4 py-2 text-base font-medium text-cyan-400 bg-cyan-900/20 rounded-lg">A.I Chat Bot</Link>
-              <hr className="border-slate-800"/>
-              <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-red-400 text-base font-medium">Log out</button>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white shadow-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-slate-800">OJTly Assistant</h1>
+                <span className="text-xs text-green-500 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Online
+                </span>
+              </div>
             </div>
           </div>
-        )}
+          <button onClick={() => router.push('/login')} className="text-xs font-medium text-slate-500 hover:text-red-500 transition-colors">Logout</button>
+        </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 relative flex items-center justify-center overflow-hidden">
-        <div className="absolute top-0 left-0 w-[800px] h-[800px] bg-cyan-600/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
+      {/* Chat Area */}
+      <main className="flex-1 overflow-y-auto px-4 py-6 bg-slate-50 bg-[url('/grid-pattern.svg')] bg-repeat">
+        <div className="max-w-3xl mx-auto space-y-4">
+          
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+              
+              {/* Avatar (AI Only) */}
+              {msg.sender === 'ai' && (
+                <div className="w-7 h-7 bg-slate-300 rounded-full flex-shrink-0 flex items-center justify-center text-slate-600">
+                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+              )}
 
-        <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-12">
-          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-10 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 mb-6 shadow-lg shadow-cyan-500/30">
-               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-               </svg>
+              {/* Message Bubble */}
+              <div className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl shadow-sm text-sm leading-relaxed ${
+                msg.sender === 'user' 
+                  ? 'bg-blue-600 text-white rounded-br-md' 
+                  : 'bg-white text-slate-700 border border-slate-100 rounded-bl-md'
+              }`}>
+                {msg.text}
+              </div>
+
             </div>
+          ))}
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">
-              Welcome to <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">OJTly A.I.</span>
-            </h1>
-            <p className="text-slate-300 text-base sm:text-lg max-w-xl mx-auto mb-10">
-              Your smart assistant for finding the best OJT opportunities. Streamline your search with artificial intelligence.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
-              <button className="group bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-cyan-500/10 hover:border-cyan-500/30 transition-all transform hover:-translate-y-1">
-                <div className="w-12 h-12 rounded-full bg-cyan-900/30 border border-cyan-500/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-cyan-500/20">
-                   <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 0 1-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                   </svg>
+          {/* Typing Indicator */}
+          {isTyping && (
+            <div className="flex items-end gap-2 justify-start">
+              <div className="w-7 h-7 bg-slate-300 rounded-full flex-shrink-0 flex items-center justify-center text-slate-600">
+                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              </div>
+              <div className="bg-white border border-slate-100 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1">View BPED Nearby OJT</h3>
-                <p className="text-xs text-slate-400">Locate physical education opportunities close to you.</p>
-              </button>
-
-              <button className="group bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all transform hover:-translate-y-1">
-                <div className="w-12 h-12 rounded-full bg-blue-900/30 border border-blue-500/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-500/20">
-                   <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                   </svg>
-                </div>
-                <h3 className="text-lg font-bold text-white mb-1">Find BSC OJT Near You</h3>
-                <p className="text-xs text-slate-400">Discover Business & Service Centers in your area.</p>
-              </button>
-
-              <button className="group bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl p-6 hover:shadow-xl hover:shadow-cyan-500/20 transition-all transform hover:-translate-y-1">
-                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4 group-hover:bg-white/30">
-                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                   </svg>
-                </div>
-                <h3 className="text-lg font-bold text-white mb-1">Start Searching</h3>
-                <p className="text-xs text-cyan-100">Find specific roles tailored to your skills.</p>
-              </button>
+              </div>
             </div>
+          )}
 
-            <p className="text-slate-500 text-xs">
-              Tip: Use specific keywords for better AI matching results.
-            </p>
-          </div>
+          <div ref={messagesEndRef} />
         </div>
       </main>
+
+      {/* Input Area */}
+      <footer className="sticky bottom-0 bg-white border-t border-slate-200 p-4 shadow-lg flex-shrink-0">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="Type your message..."
+            className="flex-1 bg-slate-100 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+          />
+          
+          <button 
+            onClick={handleSend}
+            disabled={!input.trim()}
+            className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg active:scale-95"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+          </button>
+
+        </div>
+      </footer>
+
     </div>
   );
 }
