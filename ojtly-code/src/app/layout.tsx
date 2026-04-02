@@ -1,12 +1,24 @@
-// src/app/layout.tsx
-import './globals.css'; // This might be different depending on your setup
+import './globals.css';
 import { Inter } from 'next/font/google';
+import type { Metadata, Viewport } from "next";
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'OJTly',
-  description: 'OJT Portal',
+  description: 'OJT Management System',
+  manifest: '/manifest.json', 
+  icons: {
+    icon: '/icon.png', 
+    apple: '/icon-192x192.png',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#000000',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({

@@ -4,85 +4,61 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-// Define the Job Interface
+// Updated Interface to match your exact details
 interface Job {
   id: number;
   title: string;
   company: string;
   location: string;
-  salary: string;
-  posted: string;
-  tags: string[];
-  role: string;
   province: string;
+  status: string;
+  duration: string;
+  allowance: string;
+  skills: string[];
   description: string;
-  details: {
-    level: string;
-    mode: string;
-    duration: string;
-    hours: string;
-    allowance: string;
-  };
+  deadline: string;
 }
 
-// Apply the interface to the data
+// Updated Mock Data with your exact details + 2 extras for the list
 const jobsData: Job[] = [
   {
     id: 1,
-    title: 'Web Developer',
-    company: 'TechCorp Solutions',
-    location: 'Mandaluyong, Philippines',
-    salary: '₱15,000 - ₱20,000',
-    posted: '2 days ago',
-    tags: ['On-site', 'Full-time'],
-    role: 'Developer',
-    province: 'Metro Manila',
-    description: 'We are looking for a passionate Web Developer Intern. You will work on real-world projects using React and Next.js.',
-    details: {
-      level: 'College',
-      mode: 'On-Site',
-      duration: '3 Months',
-      hours: '20-30 hrs/week',
-      allowance: '₱15,000',
-    }
+    title: 'Web Developer Intern',
+    company: 'ABC Tech Solutions',
+    location: 'Talisay City',
+    province: 'Talisay',
+    status: 'Active',
+    duration: '300 Hours',
+    allowance: 'Paid',
+    skills: ['HTML', 'CSS', 'JavaScript'],
+    description: 'We are looking for students who are willing to learn web development and assist in building modern web applications.',
+    deadline: 'July 30, 2026'
   },
   {
     id: 2,
     title: 'UI/UX Designer',
-    company: 'Creative Studio',
-    location: 'Libertad, Bacolod City',
-    salary: '₱12,000',
-    posted: '5 days ago',
-    tags: ['Remote', 'Part-time'],
-    role: 'Designer',
-    province: 'Negros Occidental',
-    description: 'Assist in creating user-centered designs for mobile and web applications.',
-    details: {
-      level: 'College',
-      mode: 'Remote',
-      duration: '2 Months',
-      hours: '15-20 hrs/week',
-      allowance: '₱12,000',
-    }
+    company: 'Creative Minds Inc.',
+    location: 'Bacolod City',
+    province: 'Bacolod',
+    status: 'Active',
+    duration: '250 Hours',
+    allowance: 'Unpaid',
+    skills: ['Figma', 'Adobe XD', 'Prototyping'],
+    description: 'Assist the design team in creating user-centered designs, wireframes, and prototypes for mobile applications.',
+    deadline: 'August 15, 2026'
   },
   {
     id: 3,
-    title: 'Data Analyst Assistant',
-    company: 'Data Insights Inc.',
-    location: 'Cebu City',
-    salary: '₱18,000',
-    posted: '1 week ago',
-    tags: ['Hybrid', 'Full-time'],
-    role: 'Data Analyst',
-    province: 'Cebu',
-    description: 'Support the data team in analyzing market trends and generating reports.',
-    details: {
-      level: 'College',
-      mode: 'Hybrid',
-      duration: '6 Months',
-      hours: '40 hrs/week',
-      allowance: '₱18,000',
-    }
+    title: 'Data Analyst Intern',
+    company: 'Data Insights Corp.',
+    location: 'Silay City',
+    province: 'Silay',
+    status: 'Active',
+    duration: '400 Hours',
+    allowance: 'Paid',
+    skills: ['Python', 'SQL', 'Excel'],
+    description: 'Help analyze market trends, clean datasets, and generate comprehensive reports for our business clients.',
+    deadline: 'September 01, 2026'
   }
 ];
 
@@ -94,16 +70,14 @@ export default function JobBoard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRole, setSelectedRole] = useState('All Roles');
   const [selectedProvince, setSelectedProvince] = useState('All Provinces');
 
   const filteredJobs = jobsData.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           job.company.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = selectedRole === 'All Roles' || job.role === selectedRole;
     const matchesProvince = selectedProvince === 'All Provinces' || job.province === selectedProvince;
     
-    return matchesSearch && matchesRole && matchesProvince;
+    return matchesSearch && matchesProvince;
   });
 
   const handleJobClick = (job: Job) => {
@@ -184,7 +158,7 @@ export default function JobBoard() {
               <div className="relative flex-1 w-full">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 0 4 4 0 100-8 0 4 4 0 00-8 0zm3.707 9.293a1 1 0 001.414 1.414l3.293 3.293a1 1 0 001.414-1.414L7.414 9.293zM15 8a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM10 12a6 6 0 00.875-11.963 5 5 0 00-1.75 0A6 6 0 0010 12z" clipRule="evenodd" />
                   </svg>
                 </div>
                 <input 
@@ -198,25 +172,14 @@ export default function JobBoard() {
               
               <div className="flex gap-2 w-full md:w-auto">
                 <select 
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  className="block w-full pl-3 pr-8 py-2.5 text-base border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm rounded-lg bg-white transition-all"
-                >
-                  <option>All Roles</option>
-                  <option>Developer</option>
-                  <option>Designer</option>
-                  <option>Data Analyst</option>
-                </select>
-                
-                <select 
                   value={selectedProvince}
                   onChange={(e) => setSelectedProvince(e.target.value)}
                   className="block w-full pl-3 pr-8 py-2.5 text-base border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent sm:text-sm rounded-lg bg-white transition-all"
                 >
                   <option>All Provinces</option>
-                  <option>Metro Manila</option>
-                  <option>Negros Occidental</option>
-                  <option>Cebu</option>
+                  <option>Bacolod</option>
+                  <option>Silay</option>
+                  <option>Talisay</option>
                 </select>
                 
                 <button 
@@ -250,36 +213,41 @@ export default function JobBoard() {
                     <div 
                       key={job.id} 
                       onClick={() => handleJobClick(job)}
-                      // FIX: Removed 'transform', 'hover:-translate-y-1', 'scale', and 'ring' to stop floating/circling
                       className={`bg-white p-5 rounded-xl border cursor-pointer transition-all duration-200 ease-in-out
                         ${selectedJob?.id === job.id 
                           ? 'border-blue-500 border-2 shadow-md' 
                           : 'border-slate-100 hover:border-slate-300 hover:shadow-md'}`}
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-xs font-bold text-slate-400 overflow-hidden">LOGO</div>
-                        <div className="text-right">
-                          <span className="block text-xs text-slate-400">{job.posted}</span>
-                          <span className="block text-xs text-blue-500">{job.location}</span>
-                        </div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-xs font-bold text-slate-400 overflow-hidden shrink-0">LOGO</div>
+                        <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+                          job.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {job.status}
+                        </span>
                       </div>
-                      <h4 className="text-lg font-bold text-slate-800 mb-1">{job.title}</h4>
-                      <p className="text-sm text-slate-500 mb-4">{job.company}</p>
                       
-                      <div className="flex flex-wrap gap-2 mb-5">
-                        {job.tags.map((tag, i) => (
-                          <span key={i} className="px-3 py-1 bg-slate-50 text-slate-500 text-xs font-medium rounded-lg border border-slate-100">
-                            {tag}
+                      <h4 className="text-lg font-bold text-slate-800 mb-1">{job.title}</h4>
+                      <p className="text-sm text-slate-500 mb-3">{job.company}</p>
+                      
+                      <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span>{job.location}</span>
+                        <span>•</span>
+                        <span>{job.duration}</span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5 mb-4">
+                        {job.skills.map((skill, i) => (
+                          <span key={i} className="px-2.5 py-1 bg-blue-50 text-blue-600 text-[11px] font-semibold rounded-md">
+                            {skill}
                           </span>
                         ))}
                       </div>
 
-                      <div className="flex justify-between items-center pt-4 border-t border-slate-50">
-                        <span className="text-sm font-bold text-slate-900">{job.salary}</span>
-                        <span className="text-sm font-bold text-blue-600 flex items-center gap-1">
-                          View 
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                        </span>
+                      <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                        <span className={`text-xs font-bold ${job.allowance === 'Paid' ? 'text-green-600' : 'text-slate-500'}`}>{job.allowance}</span>
+                        <span className="text-xs text-slate-400">Deadline: {job.deadline}</span>
                       </div>
                     </div>
                   ))
@@ -301,47 +269,62 @@ export default function JobBoard() {
 
             {selectedJob && (
               <div key={selectedJob.id} className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden sticky top-24 animate-fade-in lg:h-[calc(100vh-140px)] flex flex-col">
+                
+                {/* Header */}
                 <div className="p-6 sm:p-8 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex-shrink-0">
                   <div className="flex items-start sm:items-center gap-4 mb-4">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-xl border border-slate-100 shadow-sm flex items-center justify-center text-xl font-bold text-slate-400 flex-shrink-0">LOGO</div>
+                    <div className="w-14 h-14 bg-white rounded-xl border border-slate-100 shadow-sm flex items-center justify-center text-xl font-bold text-slate-400 flex-shrink-0">LOGO</div>
                     <div>
                       <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{selectedJob.title}</h2>
                       <p className="text-slate-500">{selectedJob.company}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedJob.tags.map((tag, i) => (
-                      <span key={i} className="px-4 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-100">
-                        {tag}
+                  <span className={`inline-block text-xs px-3 py-1 rounded-full font-bold ${
+                    selectedJob.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {selectedJob.status}
+                  </span>
+                </div>
+
+                {/* Body */}
+                <div className="p-6 flex-1 overflow-y-auto scrollbar-thin">
+                  
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <span className="block text-xs text-slate-400 mb-1 uppercase font-bold">Location</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedJob.location}</span>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <span className="block text-xs text-slate-400 mb-1 uppercase font-bold">Duration</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedJob.duration}</span>
+                    </div>
+                    <div className={`${selectedJob.allowance === 'Paid' ? 'bg-green-50' : 'bg-slate-50'} p-4 rounded-xl`}>
+                      <span className={`block text-xs mb-1 uppercase font-bold ${selectedJob.allowance === 'Paid' ? 'text-green-500' : 'text-slate-400'}`}>Allowance</span>
+                      <span className={`text-sm font-bold ${selectedJob.allowance === 'Paid' ? 'text-green-700' : 'text-slate-800'}`}>{selectedJob.allowance}</span>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl">
+                      <span className="block text-xs text-slate-400 mb-1 uppercase font-bold">Deadline</span>
+                      <span className="text-sm font-bold text-slate-800">{selectedJob.deadline}</span>
+                    </div>
+                  </div>
+
+                  {/* Skills */}
+                  <h3 className="text-base font-bold text-slate-900 mb-3">Required Skills</h3>
+                  <div className="flex flex-wrap gap-2 mb-8">
+                    {selectedJob.skills.map((skill, i) => (
+                      <span key={i} className="px-4 py-1.5 bg-blue-50 text-blue-700 text-sm font-semibold rounded-lg border border-blue-100">
+                        {skill}
                       </span>
                     ))}
                   </div>
+
+                  {/* Description */}
+                  <h3 className="text-base font-bold text-slate-900 mb-3">Job Description</h3>
+                  <p className="text-slate-600 text-sm leading-relaxed">{selectedJob.description}</p>
                 </div>
 
-                <div className="p-6 flex-1 overflow-y-auto scrollbar-thin">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-slate-50 p-4 rounded-xl transition-all hover:bg-slate-100">
-                      <span className="block text-xs text-slate-400 mb-1 uppercase font-bold">Level</span>
-                      <span className="text-sm font-bold text-slate-800">{selectedJob.details.level}</span>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl transition-all hover:bg-slate-100">
-                      <span className="block text-xs text-slate-400 mb-1 uppercase font-bold">Work Mode</span>
-                      <span className="text-sm font-bold text-slate-800">{selectedJob.details.mode}</span>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl transition-all hover:bg-slate-100">
-                      <span className="block text-xs text-slate-400 mb-1 uppercase font-bold">Duration</span>
-                      <span className="text-sm font-bold text-slate-800">{selectedJob.details.duration}</span>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-xl transition-all hover:bg-green-100">
-                      <span className="block text-xs text-green-500 mb-1 uppercase font-bold">Allowance</span>
-                      <span className="text-sm font-bold text-green-700">{selectedJob.details.allowance}</span>
-                    </div>
-                  </div>
-
-                  <h3 className="text-lg font-bold text-slate-900 mb-4">Job Post Description</h3>
-                  <p className="text-slate-600 text-sm mb-6">{selectedJob.description}</p>
-                </div>
-
+                {/* Footer */}
                 <div className="p-6 border-t border-slate-100 bg-white flex-shrink-0">
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button className="flex-1 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 active:scale-95">
@@ -352,6 +335,7 @@ export default function JobBoard() {
                     </button>
                   </div>
                 </div>
+
               </div>
             )}
           </section>
