@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'OJTly',
-  description: 'OJT Management System',
+  description: 'OJTly Management App',
   manifest: '/manifest.json', 
   icons: {
     icon: '/icon.png', 
