@@ -1,14 +1,23 @@
 'use client';
-export const dynamic = "force-dynamic";
+
+import { Suspense } from 'react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-export default function ResetPassword() {
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="text-gray-400 animate-pulse text-lg">Loading...</div></div>}>
+      <ResetPasswordContent />
+    </Suspense>
+  );
+}
+
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +45,7 @@ export default function ResetPassword() {
     if (/[A-Z]/.test(pwd)) score++;
     if (/[0-9]/.test(pwd)) score++;
     if (/[^A-Za-z0-9]/.test(pwd)) score++;
-    
+
     return {
       score,
       label: ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong', 'Excellent'][score],
@@ -76,7 +85,7 @@ export default function ResetPassword() {
 
       // Success!
       setIsSuccess(true);
-      
+
       // Redirect to login after 3 seconds
       setTimeout(() => {
         router.push('/company/login?message=Password+updated+successfully');
@@ -91,10 +100,10 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen flex font-sans">
-      
+
       {/* Left Side - Decorative */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 relative overflow-hidden justify-center items-center">
-        
+
         {/* Animated Background Blobs */}
         <div className="absolute top-10 left-10 w-72 h-72 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
         <div className="absolute top-32 right-10 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
@@ -107,8 +116,8 @@ export default function ResetPassword() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
           </div>
-          
-          <h1 className="text-5xl font-bold mb-6 leading-tight">Create New<br/>Password</h1>
+
+          <h1 className="text-5xl font-bold mb-6 leading-tight">Create New<br />Password</h1>
           <p className="text-lg text-purple-100 max-w-md mx-auto leading-relaxed">
             Your new password should be unique and secure. Make sure it's something you'll remember!
           </p>
@@ -139,7 +148,7 @@ export default function ResetPassword() {
 
       {/* Right Side - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-slate-50 p-6 overflow-y-auto relative">
-        
+
         {/* Back Button */}
         <Link href="/company/login" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group z-20">
           <svg className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -147,7 +156,7 @@ export default function ResetPassword() {
         </Link>
 
         <div className="w-full max-w-lg space-y-8 my-8">
-          
+
           {!isSuccess ? (
             <>
               {/* Header */}
@@ -163,7 +172,7 @@ export default function ResetPassword() {
 
               {/* Form Card */}
               <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100">
-                
+
                 {/* Error Message */}
                 {error && (
                   <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 animate-fade-in">
@@ -178,12 +187,12 @@ export default function ResetPassword() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  
+
                   {/* New Password Input */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
                     <div className="relative">
-                      <input 
+                      <input
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => {
@@ -191,17 +200,17 @@ export default function ResetPassword() {
                           if (error) setError(null);
                         }}
                         placeholder='••••••••'
-                        className={`w-full pl-11 pr-12 py-3 bg-gray-50 border ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl outline-none transition`} 
-                        required 
+                        className={`w-full pl-11 pr-12 py-3 bg-gray-50 border ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl outline-none transition`}
+                        required
                         minLength={8}
                         disabled={isLoading}
                       />
-                      
-                      {/* Email Icon */}
+
+                      {/* Key Icon */}
                       <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                       </svg>
-                      
+
                       {/* Show/Hide Toggle */}
                       <button
                         type="button"
@@ -224,7 +233,7 @@ export default function ResetPassword() {
                           <span className={`font-semibold text-${strength.color}-600`}>{strength.label}</span>
                         </div>
                         <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full bg-${strength.color}-500 transition-all duration-300 ease-out`}
                             style={{ width: strength.width }}
                           ></div>
@@ -237,7 +246,7 @@ export default function ResetPassword() {
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
                     <div className="relative">
-                      <input 
+                      <input
                         type={showConfirmPassword ? "text" : "password"}
                         value={confirmPassword}
                         onChange={(e) => {
@@ -245,17 +254,17 @@ export default function ResetPassword() {
                           if (error) setError(null);
                         }}
                         placeholder='••••••••'
-                        className={`w-full pl-11 pr-12 py-3 bg-gray-50 border ${error || (confirmPassword && confirmPassword !== password) ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : confirmPassword === password ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl outline-none transition`} 
-                        required 
+                        className={`w-full pl-11 pr-12 py-3 bg-gray-50 border ${error || (confirmPassword && confirmPassword !== password) ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : confirmPassword === password ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl outline-none transition`}
+                        required
                         minLength={8}
                         disabled={isLoading}
                       />
-                      
+
                       {/* Lock Icon */}
                       <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
-                      
+
                       {/* Show/Hide Toggle */}
                       <button
                         type="button"
@@ -289,8 +298,8 @@ export default function ResetPassword() {
                   </div>
 
                   {/* Submit Button */}
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={isLoading || !password || !confirmPassword || password !== confirmPassword}
                     className={`w-full py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 ${(isLoading || !password || !confirmPassword || password !== confirmPassword) ? 'opacity-60 cursor-not-allowed hover:translate-y-0 hover:shadow-lg' : ''}`}
                   >
@@ -325,7 +334,7 @@ export default function ResetPassword() {
           ) : (
             /* Success State */
             <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100 text-center animate-scale-in">
-              
+
               {/* Animated Success Icon */}
               <div className="relative inline-block mb-6">
                 <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-green-500/30">
@@ -333,7 +342,7 @@ export default function ResetPassword() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                
+
                 {/* Confetti Rings */}
                 <div className="absolute inset-0 animate-ping-once">
                   <div className="w-28 h-28 border-4 border-green-300 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-30"></div>
@@ -367,7 +376,7 @@ export default function ResetPassword() {
               </div>
 
               {/* Manual Redirect Button */}
-              <Link 
+              <Link
                 href="/company/login"
                 className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all text-lg"
               >
@@ -383,11 +392,11 @@ export default function ResetPassword() {
 
       {/* Custom Animations */}
       <style jsx global>{`
-        @keyframes blob { 
-          0% { transform: translate(0px, 0px) scale(1); } 
-          33% { transform: translate(30px, -50px) scale(1.1); } 
-          66% { transform: translate(-20px, 20px) scale(0.9); } 
-          100% { transform: translate(0px, 0px) scale(1); } 
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
         }
         .animate-blob { animation: blob 7s infinite; }
         .animation-delay-2000 { animation-delay: 2s; }
