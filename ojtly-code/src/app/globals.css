@@ -4,6 +4,26 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Prevent all horizontal overflow */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 640px) {
+  button, input, select, textarea {
+    min-height: 44px; /* iOS recommendation */
+  }
+}
+
+/* Leaflet map fix */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 10;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

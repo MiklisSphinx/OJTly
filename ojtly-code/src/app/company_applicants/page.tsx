@@ -1,269 +1,589 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { createClient } from '@/utils/supabase/client';
+
 export default function ApplicantsPage() {
   const router = useRouter();
+  
+  const supabase = createClient();
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedApplicant, setSelectedApplicant] = useState<any>(null);
 
-  // Mock Data for Applicants
-  const [applicants, setApplicants] = useState([
-    { 
-      id: 1, 
-      name: 'Juan Dela Cruz', 
-      avatar: 'JD',
-      course: 'BSIT', 
-      year: '4th Year', 
-      skills: ['HTML', 'CSS', 'JavaScript', 'React'],
-      appliedDate: '2024-05-20',
-      status: 'Pending',
-      resume: 'resume_juan.pdf'
-    },
-    { 
-      id: 2, 
-      name: 'Maria Santos', 
-      avatar: 'MS',
-      course: 'BSCS', 
-      year: '4th Year', 
-      skills: ['Python', 'Django', 'SQL'],
-      appliedDate: '2024-05-21',
-      status: 'Pending',
-      resume: 'resume_maria.pdf'
-    },
-    { 
-      id: 3, 
-      name: 'Pedro Reyes', 
-      avatar: 'PR',
-      course: 'BSIT', 
-      year: '3rd Year', 
-      skills: ['Java', 'Spring Boot', 'MySQL'],
-      appliedDate: '2024-05-22',
-      status: 'Accepted',
-      resume: 'resume_pedro.pdf'
-    },
-    { 
-      id: 4, 
-      name: 'Ana Cruz', 
-      avatar: 'AC',
-      course: 'BSCS', 
-      year: '4th Year', 
-      skills: ['UI/UX', 'Figma', 'Adobe XD'],
-      appliedDate: '2024-05-23',
-      status: 'Rejected',
-      resume: 'resume_ana.pdf'
-    },
-  ]);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isLoadingApps, setIsLoadingApps] = useState(false);
 
-  // Actions
-  const handleAccept = (id: number) => {
-    setApplicants(applicants.map(a => a.id === id ? { ...a, status: 'Accepted' } : a));
-    alert('Applicant Accepted!');
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const [posts, setPosts] = useState<any[]>([]);
+  const [activePostId, setActivePostId] = useState<number | null>(null);
+  const [applicants, setApplicants] = useState<any[]>([]);
+
+  // --- HELPER: Get Resume Link ---
+  const getResumeLink = (path: string | null | undefined) => {
+    if (!path) return "#";
+    const { data } = supabase.storage.from('resumes').getPublicUrl(path);
+    return data.publicUrl;
   };
 
-  const handleReject = (id: number) => {
-    setApplicants(applicants.map(a => a.id === id ? { ...a, status: 'Rejected' } : a));
-    alert('Applicant Rejected.');
-  };
+  // ==========================================
+  // FETCH 1: GET POSTS
+  // ==========================================
+  useEffect(() => {
+    const fetchPosts = async () => {
+      setIsLoadingPosts(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-  const handleViewResume = (name: string) => {
-    alert(`Opening resume for ${name}...`);
-  };
+        const { data: company } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'Accepted': return 'bg-green-100 text-green-700 border-green-200';
-      case 'Rejected': return 'bg-red-100 text-red-700 border-red-200';
-      default: return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        if (!company) return;
+
+        const { data, error } = await supabase
+          .from('ojt_posts')
+          .select('*')
+          .eq('company_id', company.id) 
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setPosts(data || []);
+        if (data && data.length > 0) setActivePostId(data[0].id);
+
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+        setPosts([]); 
+      } finally {
+        setIsLoadingPosts(false);
+      }
+    };
+    fetchPosts();
+  }, []);
+
+  // ==========================================
+  // FETCH 2: GET APPLICANTS
+  // Pull resume_url from profiles table
+  // ==========================================
+  const fetchApplicants = async () => {
+    setIsLoadingApps(true);
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select(`
+          *,
+          ojt_posts (id, title, company_id),
+          profiles (
+            full_name,
+            email,
+            course,
+            skills,
+            resume_url
+          )
+        `);
+
+      if (error) {
+        console.error("Fetch Error:", error.message);
+      } else {
+        console.log("APPLICATIONS WITH PROFILE RESUMES:", data);
+        setApplicants(data);
+      }
+    } catch (error) {
+      console.error("Fetch Catch Error:", error);
+    } finally {
+      setIsLoadingApps(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-100 font-sans">
+  useEffect(() => {
+    fetchApplicants();
+  }, [activePostId]);
+
+  const refreshPosts = async () => {
+     try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: company } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!company) return;
+
+        const { data, error } = await supabase
+          .from('ojt_posts')
+          .select('*')
+          .eq('company_id', company.id)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) setPosts(data);
+     } catch (e) {
+        console.error("Error refreshing posts", e);
+     }
+  }
+
+  const currentPost = posts.find(p => p.id === activePostId);
+  const stats = {
+    total: applicants.length,
+    pending: applicants.filter(a => a.status?.toLowerCase() === 'pending').length,
+    accepted: applicants.filter(a => a.status?.toLowerCase() === 'accepted').length,
+    rejected: applicants.filter(a => a.status?.toLowerCase() === 'rejected').length
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpenMenuId(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => { if(e.key==='Escape') closeModal(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  const getInitials = (name: string) => name?.split(' ').map(n=>n[0]).join('').toUpperCase() || 'U';
+
+  // --- ACTIONS ---
+
+  const handleAccept = async (id: number) => {
+    
+    const applicant = applicants.find(a => a.id === id);
+    
+    if (!applicant || applicant.status?.toLowerCase() !== 'pending') {
+       console.warn("Accept action ignored: Application is not pending.");
+       return; 
+    }
+
+    const post = posts.find(p => p.id === activePostId);
+    if (!post) {
+       console.error("Post not found for vacancy update");
+       return;
+    }
+
+    const currentVacancies = post.vacancies || 0;
+
+    if (currentVacancies <= 0) {
+       alert("No vacancies left for this position!");
+       return;
+    }
+
+    try {
+      let companyName = "Company"; 
+      const { data: { user } } = await supabase.auth.getUser();
       
-      {/* Mobile Overlay */}
+      if (user) {
+        const { data: compData } = await supabase
+          .from('companies')
+          .select('name')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (compData?.name) {
+          companyName = compData.name;
+        }
+      }
+
+      const { error: appError } = await supabase
+        .from('applications')
+        .update({ status: 'Accepted' })
+        .eq('id', id);
+
+      if (appError) throw appError;
+
+      const targetProfileId = applicant.student_id; 
+
+      if (targetProfileId) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ assigned_company: companyName })
+          .eq('id', targetProfileId);
+
+        if (profileError) {
+          console.error("Failed to update profile assignment:", profileError);
+        }
+      }
+
+      const newVacancyCount = currentVacancies - 1;
+
+      const { error: postError } = await supabase
+        .from('ojt_posts')
+        .update({ vacancies: newVacancyCount })
+        .eq('id', activePostId); 
+
+      if (postError) throw postError;
+
+      await fetchApplicants(); 
+      await refreshPosts();   
+
+      if (selectedApplicant?.id === id) closeModal();
+
+    } catch (error) {
+      console.error("Critical Error in Accept Flow:", error);
+      alert("Failed to accept application. Changes reverted.");
+    }
+  };
+
+  const handleReject = async (id: number) => {
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .update({ status: 'Rejected' })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await fetchApplicants();
+      if (selectedApplicant?.id === id) closeModal();
+
+    } catch (error) {
+      console.error("Error rejecting:", error);
+      alert("Failed to reject application.");
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to remove this application?")) return;
+
+    try {
+      const { error } = await supabase
+        .from('applications')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await fetchApplicants();
+      setOpenMenuId(null);
+      if (selectedApplicant?.id === id) closeModal();
+
+    } catch (error) {
+      console.error("Error deleting:", error);
+      alert("Failed to remove application.");
+    }
+  };
+
+  const toggleMenu = (e: React.MouseEvent, id: number) => { e.stopPropagation(); setOpenMenuId(openMenuId === id ? null : id); };
+  const openModal = (app: any) => { setSelectedApplicant(app); setIsModalOpen(true); setOpenMenuId(null); };
+  const closeModal = () => { setIsModalOpen(false); setSelectedApplicant(null); };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex">
+      
       {isSidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 transition-transform duration-300 
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
-      >
+      <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 flex-col transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0 flex' : '-translate-x-0 hidden lg:flex'}`}>
+        
         <div className="p-6 border-b border-slate-100">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-slate-900">
             <span className="text-teal-600 text-2xl">◉</span> OJTly
           </Link>
         </div>
 
-        <nav className="p-4 space-y-1">
-          <Link href="/company_main" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-            Dashboard
-          </Link>
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+          <Link href="/company_main" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg text-sm">Dashboard</Link>
+          <Link href="/company_ojtpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg text-sm">My OJT Posts</Link>
+          <Link href="/company_createpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg text-sm">Create Post</Link>
           
-          <Link href="/company_ojtpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-            My OJT Posts
-          </Link>
+          <Link href="/company_applicants" className="flex items-center gap-3 px-4 py-3 text-white bg-teal-600 rounded-lg shadow-md shadow-teal-500/20 hover:bg-teal-700 transition-colors">Applicants</Link>
 
-          {/* Map Picker Link */}
-          <Link href="/company_createpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            Create Post
-          </Link>
-
-          {/* Active Link: Applicants */}
-          <Link href="/company_applicants" className="flex items-center gap-3 px-4 py-3 text-white bg-teal-600 rounded-lg font-medium">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-            Applicants
-          </Link>
-
-          <Link href="/company_documents" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-            Documents
-          </Link>
-
-          <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            Settings
-          </Link>
+          <Link href="/company_documents" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg text-sm">Documents</Link>
+          
+          <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg text-sm">Settings</Link>
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100">
-           <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 rounded-lg font-medium transition-colors w-full text-red-500">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-            Log out
+        <div className="p-4 border-t border-slate-100 mt-auto">
+           <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg text-sm transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7m0 0a9 9 0 0118 0z"></path></svg>
+              Log out
            </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="lg:ml-64 min-h-screen">
-        
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 h-16">
-          <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-            
-            <div className="flex items-center gap-2">
-              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-lg mr-2">
-                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-              </button>
-              <h1 className="text-lg font-bold text-slate-800">Applicants</h1>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm">
-                A
-              </div>
-            </div>
+      <main className="lg:ml-64 flex-1 min-h-screen flex flex-col w-full">
+        <header className="sticky top-0 z-30 bg-white border-b border-slate-200 h-16 shadow-sm flex items-center px-6 justify-between">
+          <div className="flex items-center gap-3">
+             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg -ml-2">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+             </button>
+             <h1 className="text-xl font-bold text-slate-800">Applicants</h1>
+          </div>
+          <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center text-teal-700 font-bold text-xs cursor-pointer">
+            U
           </div>
         </header>
 
-        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+        <div className="p-6 max-w-6xl mx-auto w-full space-y-8">
           
-          {/* Page Header */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">Applicants for Web Developer Intern</h2>
-                <p className="text-sm text-slate-500 mt-1">Review and manage applications for this position.</p>
-              </div>
-              <span className="px-3 py-1 bg-teal-50 text-teal-700 text-sm font-semibold rounded-full border border-teal-100">
-                Total: {applicants.length}
-              </span>
-            </div>
-          </div>
-
-          {/* Applicants List */}
-          <div className="space-y-4">
-            {applicants.map((applicant) => (
-              <div key={applicant.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                
-                <div className="p-5 sm:p-6 flex flex-col sm:flex-row gap-4">
-                  
-                  {/* Avatar & Basic Info */}
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-sm">
-                      {applicant.avatar}
-                    </div>
-                    
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-slate-800">{applicant.name}</h3>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${getStatusStyle(applicant.status)}`}>
-                          {applicant.status}
-                        </span>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500 mb-3">
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path></svg>
-                          {applicant.course}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                          {applicant.year}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                          Applied: {applicant.appliedDate}
-                        </span>
-                      </div>
-
-                      {/* Skills */}
-                      <div className="flex flex-wrap gap-2">
-                        {applicant.skills.map((skill, i) => (
-                          <span key={i} className="px-2 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded-md">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex sm:flex-col gap-2 sm:border-l sm:border-slate-100 sm:pl-4">
-                    <button 
-                      onClick={() => handleViewResume(applicant.name)}
-                      className="flex-1 sm:flex-none px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                      Resume
-                    </button>
-                    
-                    {applicant.status === 'Pending' && (
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleAccept(applicant.id)}
-                          className="flex-1 sm:flex-none px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors shadow-sm"
-                        >
-                          Accept
-                        </button>
-                        <button 
-                          onClick={() => handleReject(applicant.id)}
-                          className="flex-1 sm:flex-none px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors shadow-sm"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-
-                    {applicant.status !== 'Pending' && (
-                       <div className="hidden sm:block text-xs text-center text-slate-400 mt-1 italic">
-                         Action completed
-                       </div>
-                    )}
-                  </div>
-
+          <div>
+             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Select Job Post</h3>
+             
+             {isLoadingPosts ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[1,2,3].map(i => <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse"></div>)}
                 </div>
-              </div>
-            ))}
+             ) : posts.length === 0 ? (
+                <div className="bg-white p-12 rounded-xl border border-dashed border-slate-300 text-center">
+                   <h3 className="text-sm font-semibold text-slate-800 mb-1">No Job Posts Found</h3>
+                   <p className="text-xs text-slate-500 mb-4">Create a post to start seeing applicants.</p>
+                   <Link href="/company_createpost" className="px-4 py-2 bg-teal-600 text-white text-xs rounded-lg hover:bg-teal-700">Create New Post</Link>
+                </div>
+             ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {posts.map((post) => {
+                    const isActive = activePostId === post.id;
+                    return (
+                      <button
+                        key={post.id}
+                        onClick={() => setActivePostId(post.id)}
+                        className={`
+                          relative flex items-center justify-between p-5 rounded-xl border text-left w-full transition-all group
+                          ${isActive ? 'bg-teal-50 border-teal-500 ring-1 ring-teal-500 shadow-sm z-10' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}
+                        `}
+                      >
+                        <div className="min-w-0 mr-2">
+                           <div className="flex justify-between items-start">
+                              <div>
+                                 <h4 className={`font-bold text-sm truncate ${isActive ? 'text-teal-800' : 'text-slate-700'}`}>{post.title}</h4>
+                                 <p className="text-xs text-slate-500 mt-1">{post.department}</p>
+                              </div>
+                              
+                              <div className={`mt-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                (post.vacancies > 0) ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-red-50 text-red-700 border-red-200'
+                              }`}>
+                                <span>{post.vacancies} Slots Left</span>
+                              </div>
+                           </div>
+                        </div>
+                        
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ml-4 ${isActive ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
+                           {isActive && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+             )}
           </div>
+
+          {!isLoadingPosts && activePostId && (
+            <>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in duration-300">
+                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><p className="text-[10px] font-bold text-slate-400 uppercase">Total Apps</p><p className="text-2xl font-bold text-slate-800 mt-1">{stats.total}</p></div>
+                 <div className="bg-white p-4 rounded-xl border border-amber-100 shadow-sm"><p className="text-[10px] font-bold text-amber-600 uppercase">Pending</p><p className="text-2xl font-bold text-amber-600 mt-1">{stats.pending}</p></div>
+                 <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm"><p className="text-[10px] font-bold text-green-600 uppercase">Accepted</p><p className="text-2xl font-bold text-green-600 mt-1">{stats.accepted}</p></div>
+                 <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm"><p className="text-[10px] font-bold text-red-600 uppercase">Rejected</p><p className="text-2xl font-bold text-red-600 mt-1">{stats.rejected}</p></div>
+              </div>
+
+              <div className="flex items-end justify-between border-b border-slate-200 pb-2 mb-4">
+                 <h2 className="text-lg font-bold text-slate-800">Candidates for <span className="text-teal-600">{currentPost?.title}</span></h2>
+                 
+                 {currentPost && (
+                    <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-md">
+                      {currentPost.vacancies} Slots Available
+                    </span>
+                 )}
+              </div>
+
+              <div className="space-y-3 min-h-[200px]">
+                
+                {isLoadingApps ? (
+                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                      <svg className="animate-spin h-6 w-6 mb-2 text-teal-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      <p className="text-sm font-medium">Processing...</p>
+                   </div>
+                ) : applicants.length === 0 ? (
+                   <div className="py-16 text-center bg-white rounded-xl border border-dashed border-slate-300">
+                      <h3 className="text-sm font-semibold text-slate-800 mb-1">No applications yet</h3>
+                      <p className="text-xs text-slate-500 max-w-xs mx-auto">When students apply, they will appear here.</p>
+                   </div>
+                ) : (
+                   applicants.map((applicant) => (
+                     <div key={applicant.id} className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 items-start sm:items-center group hover:shadow-md transition-shadow">
+                        
+                        <div className="flex items-center gap-3 flex-1 min-w-0 w-full">
+                           <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
+                              {getInitials(applicant.profiles?.full_name)}
+                           </div>
+                           <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                 <span className="font-bold text-slate-800 text-sm truncate">{applicant.profiles?.full_name}</span>
+                                 <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase shrink-0 ${
+                                   applicant.status?.toLowerCase() === 'accepted' ? 'bg-green-50 text-green-700 border-green-200' : 
+                                   applicant.status?.toLowerCase() === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' : 
+                                   'bg-amber-50 text-amber-700 border-amber-200'
+                                 }`}>
+                                   {applicant.status}
+                                 </span>
+                              </div>
+                              <div className="text-xs text-slate-500 truncate">{applicant.profiles?.course} • {(applicant.profiles?.skills || []).slice(0, 2).join(', ')}</div>
+                           </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end pl-0 sm:pl-4 sm:border-l sm:border-slate-100 flex-wrap">
+                           
+                           {/* --- RESUME BUTTON (from profiles.resume_url) --- */}
+                           {applicant.profiles?.resume_url ? (
+                             <a 
+                               href={getResumeLink(applicant.profiles.resume_url)} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-all transform active:scale-95"
+                             >
+                               Resume
+                             </a>
+                           ) : (
+                             <span className="px-3 py-1.5 text-xs font-semibold text-gray-400 bg-gray-100 rounded-md cursor-not-allowed">
+                               No Resume
+                             </span>
+                           )}
+
+                           <button onClick={() => openModal(applicant)} className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> Review
+                           </button>
+
+                           {applicant.status?.toLowerCase() === 'pending' && (
+                             <>
+                                <button 
+                                  onClick={() => handleAccept(applicant.id)} 
+                                  className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md shadow-sm transition-all transform active:scale-95"
+                                >
+                                   Accept
+                                </button>
+                                <button 
+                                  onClick={() => handleReject(applicant.id)} 
+                                  className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-md shadow-sm transition-all transform active:scale-95"
+                                >
+                                   Reject
+                                </button>
+                             </>
+                           )}
+
+                           {(applicant.status?.toLowerCase() === 'accepted' || applicant.status?.toLowerCase() === 'rejected') && (
+                             <div className="relative" ref={openMenuId === applicant.id ? menuRef : null}>
+                                <button 
+                                  onClick={(e) => toggleMenu(e, applicant.id)} 
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                                
+                                {openMenuId === applicant.id && (
+                                  <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 animate-in fade-in duration-100">
+                                     <button 
+                                       onClick={() => handleDelete(applicant.id)} 
+                                       className="w-full text-left text-xs px-3 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
+                                     >
+                                        Remove
+                                     </button>
+                                  </div>
+                                )}
+                             </div>
+                           )}
+                        </div>
+                     </div>
+                   ))
+                )}
+              </div>
+            </>
+          )}
 
         </div>
       </main>
+
+      {/* MODAL */}
+      {isModalOpen && selectedApplicant && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              
+              <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between bg-slate-50">
+                 <div>
+                    <h3 className="text-lg font-bold text-slate-900">{selectedApplicant.profiles?.full_name}</h3>
+                    <p className="text-sm text-slate-500">{selectedApplicant.profiles?.course}</p>
+                 </div>
+                 <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                 <div>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Skills</h4>
+                    <div className="flex flex-wrap gap-2">
+                       {(selectedApplicant.profiles?.skills || []).map((skill:string, i:number) => (<span key={i} className="px-3 py-1 bg-teal-50 text-teal-700 text-xs font-semibold rounded-full border border-teal-100">{skill}</span>))}
+                    </div>
+                 </div>
+                 <div>
+                    <div className="flex items-center justify-between mb-2">
+                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Resume / CV</h4>
+                       {/* From profiles.resume_url */}
+                       {selectedApplicant.profiles?.resume_url && (
+                         <a 
+                           href={getResumeLink(selectedApplicant.profiles.resume_url)} 
+                           target="_blank" 
+                           rel="noopener noreferrer" 
+                           className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1"
+                         >
+                           Open in New Tab <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                         </a>
+                       )}
+                    </div>
+                    <div className="w-full h-[500px] bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 text-sm relative overflow-hidden">
+                       {/* From profiles.resume_url */}
+                       {selectedApplicant.profiles?.resume_url ? (
+                         <iframe 
+                           src={getResumeLink(selectedApplicant.profiles.resume_url)} 
+                           className="absolute inset-0 w-full h-full bg-white" 
+                           title="Resume Preview"
+                         />
+                       ) : (
+                         <div className="text-center p-4">
+                           <svg className="mx-auto h-8 w-8 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                           <p>No resume uploaded.</p>
+                         </div>
+                       )}
+                    </div>
+                 </div>
+              </div>
+
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+                 {selectedApplicant.status?.toLowerCase() !== 'pending' && (
+                   <button 
+                     onClick={() => { handleDelete(selectedApplicant.id); closeModal(); }} 
+                     className="text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors"
+                   >
+                      Remove
+                   </button>
+                 )}
+                 <div className="flex gap-3">
+                    {selectedApplicant.status?.toLowerCase() === 'pending' ? (
+                      <>
+                         <button onClick={() => { handleReject(selectedApplicant.id); closeModal(); }} className="px-5 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-transform active:scale-95">Reject</button>
+                         <button onClick={() => { handleAccept(selectedApplicant.id); closeModal(); }} className="px-5 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-transform active:scale-95">Accept</button>
+                      </>
+                    ) : (
+                      <button onClick={closeModal} className="px-5 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors">Close</button>
+                    )}
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
     </div>
   );
 }

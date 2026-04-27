@@ -85,10 +85,6 @@ const OJTlyLanding = () => {
         
         <div className="container hero-content">
           <div className="hero-text reveal">
-            <div className="hero-badge">
-              <span className="badge-dot"></span>
-              Trusted by 10,000+ Students
-            </div>
             <h1>
               Launch Your Career with the Perfect <span className="highlight">Internship</span>
             </h1>
@@ -103,6 +99,7 @@ const OJTlyLanding = () => {
                   <path d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
               </Link>
+              
               <a href="#features" className="btn btn-outline btn-large">How it Works</a>
             </div>
           </div>
@@ -184,7 +181,7 @@ const OJTlyLanding = () => {
                 <p>We’d love to hear from you! Whether you have questions, feedback, or need help, feel free to contact us and our team will assist you right away.</p>
                 
                 <div className="contact-actions">
-                   <a href="mailto:support@ojtly.com" className="btn btn-primary btn-large">
+                   <a href="mailto:kimantonares69@gmail.com" className="btn btn-primary btn-large">
                       Get in Touch
                       <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -197,7 +194,7 @@ const OJTlyLanding = () => {
          </div>
       </section>
 
-      {/* Footer - FIXED */}
+      {/* Footer */}
       <footer className="footer">
         <div className="container footer-grid">
           {/* Brand Column */}
@@ -234,17 +231,17 @@ const OJTlyLanding = () => {
           <div className="footer-links">
             <div className="footer-col">
               <h4>Platform</h4>
-              <a href="#">Browse Jobs</a>
-              <a href="#">Companies</a>
-              <a href="#">Resources</a>
-              <a href="#">Mentorship</a>
+              <a href="#">Browse OJTs</a>
+              <a href="#">For Companies</a>
+              <a href="#">System Requirements</a>
+              <a href="#">Help Center</a>
             </div>
             <div className="footer-col">
               <h4>Company</h4>
-              <a href="#">About Us</a>
+              <a href="#">About OJTly</a>
+              <a href="#">Contact Us</a>
               <a href="#">Careers</a>
-              <a href="#">Press</a>
-              <a href="#">Contact</a>
+              <a href="#">Press Kit</a>
             </div>
             <div className="footer-col">
               <h4>Legal</h4>
@@ -252,13 +249,6 @@ const OJTlyLanding = () => {
               <a href="#">Terms of Service</a>
               <a href="#">Cookie Policy</a>
             </div>
-          </div>
-        </div>
-        
-        {/* Copyright Bar */}
-        <div className="footer-bottom">
-          <div className="container">
-             <p>© 2024 OJTly. All rights reserved. Made with love for students.</p>
           </div>
         </div>
       </footer>

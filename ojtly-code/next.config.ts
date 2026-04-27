@@ -1,14 +1,19 @@
-import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
-  register: true,
+  extendDefaultRuntimeCaching: true,
+  workboxOptions: {
+    skipWaiting: true, // This replaces your red-error code
+    clientsClaim: true,
+  },
 });
 
-const nextConfig: NextConfig = {
-  productionBrowserSourceMaps: false,
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  turbopack: {}, 
 };
 
-export default withPWA(nextConfig as any);
+export default withPWA(nextConfig);
