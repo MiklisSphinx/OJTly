@@ -18,7 +18,7 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     // 1. This "catches" the session from the email link (PASSWORD_RECOVERY event)
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
       console.log('Auth event:', event); // Debug log
       
       if (event === "PASSWORD_RECOVERY" || session) {
