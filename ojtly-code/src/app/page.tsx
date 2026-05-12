@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Inter, Space_Grotesk } from 'next/font/google';
 import './Hero.css';
 
-// Initialize Fonts
 const inter = Inter({ 
   subsets: ['latin'],
   variable: '--font-inter', 
@@ -22,6 +21,8 @@ const OJTlyLanding = () => {
   const [scrolled, setScrolled] = useState(false);
   
   useEffect(() => {
+    document.documentElement.style.scrollBehavior = 'smooth';
+
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
     };
@@ -41,8 +42,13 @@ const OJTlyLanding = () => {
     return () => {
       window.removeEventListener('scroll', handleScroll);
       observer.disconnect();
+      document.documentElement.style.scrollBehavior = 'auto';
     };
   }, []);
+
+  const handleNavClick = () => {
+    setIsMenuOpen(false);
+  };
 
   return (
     <div className={`${inter.variable} ${spaceGrotesk.variable} landing-wrapper`}>
@@ -52,7 +58,7 @@ const OJTlyLanding = () => {
         <div className="container navbar-content">
           <a href="#" className="logo">
             <span className="logo-icon">
-              <img src="/Images/Logos.svg" alt="OJTly Logo" />
+              <img src="/Images/Logos.svg" alt="OJTly Logo" width={32} height={32} /> 
             </span> 
             <span className="logo-text">OJTly</span>
           </a>
@@ -64,14 +70,15 @@ const OJTlyLanding = () => {
           </button>
 
           <nav className={`nav-links ${isMenuOpen ? 'active' : ''}`}>
-            <a href="#" className="nav-link active">Home</a>
-            <a href="#about" className="nav-link">About Us</a>
-            <a href="#contact" className="nav-link">Help</a>
+            <a href="#" className="nav-link active" onClick={handleNavClick}>Home</a>
+            <a href="#about" className="nav-link" onClick={handleNavClick}>About</a>
+            <a href="#features" className="nav-link" onClick={handleNavClick}>Features</a>
+            <a href="#contact" className="nav-link" onClick={handleNavClick}>Help</a>
           </nav>
 
           <div className={`auth-buttons ${isMenuOpen ? 'active' : ''}`}>
-            <Link href="/student/login" className="btn btn-ghost">Login</Link>
-            <Link href="/student/register" className="btn btn-primary">Register</Link>
+            <Link href="/student/login" className="btn btn-ghost" onClick={handleNavClick}>Login</Link>
+            <Link href="/student/register" className="btn btn-primary" onClick={handleNavClick}>Register</Link>
           </div>
         </div>
       </header>
@@ -85,6 +92,11 @@ const OJTlyLanding = () => {
         
         <div className="container hero-content">
           <div className="hero-text reveal">
+            <div className="hero-badge">
+              <span className="badge-dot"></span>
+              Your Career Starts Here
+            </div>
+            
             <h1>
               Launch Your Career with the Perfect <span className="highlight">Internship</span>
             </h1>
@@ -125,10 +137,13 @@ const OJTlyLanding = () => {
         </div>
       </section>
 
-      {/* Features Section */}
+  
+
+      {/* Features Section (Cleaned up) */}
       <section id="features" className="features-section">
         <div className="container">
           <div className="section-header reveal">
+            <span className="section-tag">Features</span>
             <h2>Why Students Choose <span className="highlight">OJTly</span></h2>
             <p>We provide the tools and support you need to launch your career.</p>
           </div>
@@ -138,7 +153,7 @@ const OJTlyLanding = () => {
               {
                 icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>,
                 title: "Smart Matching",
-                desc: "Our AI-powered algorithm connects you with roles that fit your unique skill set.",
+                desc: "Our algorithm connects you with roles that fit your unique skill set perfectly.",
                 color: "blue"
               },
               {
@@ -159,8 +174,8 @@ const OJTlyLanding = () => {
                 desc: "Every company on our platform is vetted for safe, meaningful experiences.",
                 color: "orange"
               }
-            ].map((feature, idx) => (
-              <div key={idx} className={`feature-card reveal delay-${idx}`}>
+            ].map((feature) => (
+              <div key={feature.title} className="feature-card reveal">
                 <div className={`icon-box ${feature.color}`}>
                   <div className="icon-moving">{feature.icon}</div>
                 </div>
@@ -172,16 +187,16 @@ const OJTlyLanding = () => {
         </div>
       </section>
 
-      {/* Contact / Bridge Section */}
+      {/* Contact Section */}
       <section id="contact" className="contact-section">
          <div className="container contact-container reveal">
             <div className="contact-content">
                 <span className="section-tag">Contact Us</span>
                 <h2>Your Bridge to the Right Internship Experience</h2>
-                <p>We’d love to hear from you! Whether you have questions, feedback, or need help, feel free to contact us and our team will assist you right away.</p>
+                <p>We’d love to hear from you! Whether you have questions, feedback, or need help, feel free to contact us.</p>
                 
                 <div className="contact-actions">
-                   <a href="mailto:kimantonares69@gmail.com" className="btn btn-primary btn-large">
+                   <a href="mailto:support@ojtly.com" className="btn btn-primary btn-large">
                       Get in Touch
                       <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none">
                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -197,43 +212,31 @@ const OJTlyLanding = () => {
       {/* Footer */}
       <footer className="footer">
         <div className="container footer-grid">
-          {/* Brand Column */}
           <div className="footer-brand">
             <a href="#" className="logo">
-              <img src="/Images/Logos.svg" alt="Logo" /> 
+              <img src="/Images/Logos.svg" alt="Logo" width={28} height={28} /> 
               <span>OJTly</span>
             </a>
             <p>Empowering the next generation of professionals to launch their careers with confidence.</p>
             
-            {/* Social Icons */}
             <div className="social-links">
               <a href="#" aria-label="Twitter">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/>
-                </svg>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>
               </a>
               <a href="#" aria-label="LinkedIn">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
-                </svg>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
               </a>
               <a href="#" aria-label="Instagram">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                </svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
               </a>
             </div>
           </div>
 
-          {/* Links Columns */}
           <div className="footer-links">
             <div className="footer-col">
               <h4>Platform</h4>
               <a href="#">Browse OJTs</a>
               <a href="#">For Companies</a>
-              <a href="#">System Requirements</a>
               <a href="#">Help Center</a>
             </div>
             <div className="footer-col">
@@ -241,7 +244,6 @@ const OJTlyLanding = () => {
               <a href="#">About OJTly</a>
               <a href="#">Contact Us</a>
               <a href="#">Careers</a>
-              <a href="#">Press Kit</a>
             </div>
             <div className="footer-col">
               <h4>Legal</h4>

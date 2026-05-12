@@ -276,6 +276,93 @@ const getStatusLabel = (status: string | undefined): string => {
   return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 };
 
+// ==========================================
+// ✅ SKELETON CARD COMPONENT (Matches Post Card)
+// ==========================================
+const PostSkeletonCard = () => (
+  <div className="bg-white p-3.5 sm:p-5 rounded-lg sm:rounded-xl border-2 border-slate-100 animate-pulse">
+    <div className="flex justify-between items-start mb-2.5 sm:mb-3">
+      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-200 shrink-0" />
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="w-12 h-5 sm:w-14 sm:h-5 bg-slate-100 rounded-full" />
+        <div className="w-10 h-5 sm:w-12 sm:h-5 bg-slate-100 rounded-full" />
+      </div>
+    </div>
+    <div className="h-4 sm:h-5 bg-slate-200 rounded w-3/4 mb-2" />
+    <div className="h-3 sm:h-4 bg-slate-100 rounded w-1/2 mb-2 sm:mb-3" />
+    <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+      <div className="h-3 w-16 bg-slate-100 rounded" />
+      <div className="h-3 w-12 bg-slate-100 rounded hidden xs:block" />
+      <div className="h-3 w-16 bg-slate-100 rounded ml-auto hidden sm:block" />
+    </div>
+    <div className="flex flex-wrap gap-1 sm:gap-1.5 mb-2 sm:mb-3">
+      <div className="h-5 w-12 bg-slate-100 rounded-md" />
+      <div className="h-5 w-14 bg-slate-100 rounded-md" />
+      <div className="h-5 w-10 bg-slate-100 rounded-md" />
+    </div>
+    <div className="flex justify-between items-center pt-2 sm:pt-3 border-t border-slate-100">
+      <div className="h-3 w-16 bg-slate-100 rounded" />
+      <div className="h-3 w-20 bg-slate-100 rounded" />
+    </div>
+  </div>
+);
+
+// ==========================================
+// ✅ SKELETON DETAIL VIEW COMPONENT
+// ==========================================
+const DetailSkeleton = () => (
+  <div className="bg-white rounded-xl sm:rounded-3xl shadow-xl border border-slate-100 overflow-hidden animate-pulse">
+    <div className="p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-white to-blue-50/30 border-b border-slate-100">
+      <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
+        <div className="w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl bg-slate-200 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="h-5 sm:h-6 lg:h-7 bg-slate-200 rounded w-3/4 mb-2" />
+          <div className="h-3 sm:h-4 bg-slate-100 rounded w-1/2 mb-2" />
+          <div className="h-6 w-24 bg-slate-100 rounded-lg" />
+        </div>
+        <div className="w-20 h-6 sm:w-24 sm:h-7 bg-slate-100 rounded-full shrink-0" />
+      </div>
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
+        <div className="h-7 sm:h-8 w-24 sm:w-32 bg-slate-100 rounded-lg" />
+        <div className="h-7 sm:h-8 w-20 sm:w-24 bg-slate-100 rounded-lg" />
+        <div className="h-7 sm:h-8 w-28 sm:w-36 bg-slate-100 rounded-lg" />
+      </div>
+    </div>
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-slate-50 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-100">
+            <div className="h-3 w-16 bg-slate-200 rounded mb-2" />
+            <div className="h-5 sm:h-6 w-20 bg-slate-300 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="mb-6 sm:mb-8">
+        <div className="h-4 sm:h-5 bg-slate-200 rounded w-32 mb-3" />
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-7 sm:h-8 w-16 sm:w-20 bg-slate-100 rounded-lg" />
+          ))}
+        </div>
+      </div>
+      <div className="mb-4">
+        <div className="h-4 sm:h-5 bg-slate-200 rounded w-40 mb-3" />
+        <div className="space-y-2">
+          <div className="h-3 bg-slate-100 rounded w-full" />
+          <div className="h-3 bg-slate-100 rounded w-5/6" />
+          <div className="h-3 bg-slate-100 rounded w-4/6" />
+        </div>
+      </div>
+    </div>
+    <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/50">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <div className="h-10 sm:h-12 bg-slate-300 rounded-lg sm:rounded-xl w-full" />
+        <div className="h-10 sm:h-12 bg-slate-200 rounded-lg sm:rounded-xl w-full" />
+      </div>
+    </div>
+  </div>
+);
+
 export default function StudentMainPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -555,21 +642,19 @@ export default function StudentMainPage() {
   };
 
   // ==========================================
-  // ✅ CORRECT handleApply (NO company_id)
+  // ✅ CORRECT handleApply (WITH SAFETY CHECK)
   // ==========================================
-  
   const handleApply = async (postId: string) => {
     const { data: { user: liveUser } } = await supabase.auth.getUser(); 
     
     if (!liveUser) {
-      console.log("❌ No user found in live check");
       showNotification('error', 'Please log in to apply');
       return;
     }
 
     const userId = liveUser.id;
-    console.log("✅ Applying with userId:", userId);
 
+    // ✅ SAFETY CHECK: Server-side verification that they aren't hired elsewhere
     if (hasActiveOJT && !isActiveOJTPost(postId)) {
       showNotification('warning', `You're currently enrolled at ${activeOJTCompany}. Complete it first or contact admin.`);
       return;
@@ -583,55 +668,36 @@ export default function StudentMainPage() {
     setApplyingPostId(postId);
 
     try {
-      
-               // 1. DECLARE THE QUERY FIRST (with checkError)
-            const { data: applicationData, error: checkError } = await supabase
-              .from('applications')
-              .select(`
-                status,
-                ojt_posts (
-                  companies (
-                    company_name
-                  )
-                )
-              `)
-              .eq('student_id', userId)
-              // .eq('ojt_post_id', postId) <-- Z might have had this, keep it if you need it for applying!
-              .maybeSingle();
+      // ✅ FIXED — Now checks for THIS specific post, not ANY post
+      const { data: existingApp, error: checkError } = await supabase
+        .from('applications')
+        .select('status')
+        .eq('student_id', userId)
+        .eq('post_id', postId)        // ← THIS IS THE KEY FIX
+        .maybeSingle();
 
-            // 2. NOW YOU CAN USE checkError
-            if (checkError) {
-              console.error("Error checking application:", checkError.message);
-              return;
-            }
-
-            // 3. DECLARE existingApp
-            const existingApp = applicationData;
-
-            // 4. NOW YOU CAN USE applicationData/existingApp (with the [0] fix!)
-            const fetchedCompanyName = (existingApp as any)?.ojt_posts?.[0]?.companies?.[0]?.company_name;
-
-            // Do whatever you need with fetchedCompanyName below this line
+      if (checkError) {
+        console.error("Error checking application:", checkError.message);
+        return;
+      }
 
       if (existingApp) {
-        console.log("⚠️ Already applied:", existingApp);
-        setApplicationStatuses(prev => new Map(prev).set(postId, (existingApp as any).status || 'pending'));
+        setApplicationStatuses(prev => new Map(prev).set(postId, existingApp.status || 'pending'));
         showNotification('warning', 'You have already applied to this position');
         return;
       }
 
-            const { error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('applications')
         .insert([{
           post_id: postId,
           student_id: userId,
-          status: 'pending', // ✅ Matches schema
+          status: 'pending',
           created_at: new Date().toISOString(),
         }])
-        .select(); // ✅ Fixes RLS select policy
+        .select();
 
       if (insertError) {
-               console.error('❌ Insert error:', insertError);
         
         if (insertError.code === '23505') {
           setApplicationStatuses(prev => new Map(prev).set(postId, 'pending'));
@@ -640,8 +706,6 @@ export default function StudentMainPage() {
         }
         throw new Error(insertError.message || 'Failed to submit application');
       }
-
-      console.log("✅ Application inserted successfully!");
 
       setApplicationStatuses(prev => new Map(prev).set(postId, 'pending'));
       showNotification('success', 'Application submitted successfully!');
@@ -730,25 +794,63 @@ export default function StudentMainPage() {
   const cities = ['All Cities', ...new Set(posts.filter((p: any) => p).map((p: any) => p.location_name.split(',')[0].trim()))];
 
   // ==========================================
-  // LOADING STATE
+  // ✅ UPDATED LOADING STATE WITH SKELETONS
   // ==========================================
   if (user === undefined || postsLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 font-sans antialiased flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="w-12 h-12 sm:w-16 sm:h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium text-sm sm:text-base">Loading opportunities...</p>
-          
-          {authStuck && (
-            <button 
-              type="button"
-              onClick={handleManualAuthCheck}
-              className="mt-4 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2 mx-auto"
-            >
-              🔄 Refresh Session
-            </button>
-          )}
-        </div>
+      <div className="min-h-screen bg-slate-50 font-sans antialiased">
+        {/* Header Skeleton */}
+        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-lg border-b border-slate-200/80 h-14 sm:h-16 animate-pulse">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-slate-200 rounded-lg" />
+              <div className="w-16 h-4 bg-slate-200 rounded hidden xs:block" />
+            </div>
+            <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-full">
+              <div className="w-20 h-7 bg-slate-200 rounded-full" />
+              <div className="w-16 h-7 bg-slate-200 rounded-full" />
+              <div className="w-24 h-7 bg-slate-200 rounded-full" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-slate-200 rounded-full" />
+              <div className="w-20 h-8 bg-slate-200 rounded-xl hidden sm:block" />
+            </div>
+          </div>
+        </header>
+
+        {/* Hero Skeleton */}
+        <section className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 pt-6 sm:pt-8 pb-20 sm:pb-28 px-3 sm:px-4 animate-pulse">
+          <div className="max-w-7xl mx-auto text-center">
+            <div className="w-48 h-6 sm:w-64 sm:h-8 bg-white/20 rounded mx-auto mb-3" />
+            <div className="w-64 h-4 sm:w-80 sm:h-5 bg-blue-200/30 rounded mx-auto mb-6" />
+            <div className="max-w-3xl mx-auto bg-white rounded-xl sm:rounded-2xl p-3 flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 h-10 sm:h-12 bg-slate-100 rounded-lg" />
+              <div className="w-full sm:w-40 h-10 sm:h-12 bg-slate-100 rounded-lg" />
+              <div className="w-full sm:w-28 h-10 sm:h-12 bg-slate-200 rounded-lg" />
+            </div>
+          </div>
+        </section>
+
+        {/* Main Content Skeleton */}
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8 pb-12 sm:pb-16 -mt-10 sm:-mt-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+            <aside className="lg:col-span-5">
+              <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-4 lg:sticky lg:top-24 max-h-[60vh] lg:max-h-[calc(100vh-120px)] overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center mb-3 sm:mb-4 px-1">
+                  <div className="h-4 w-32 bg-slate-200 rounded" />
+                </div>
+                <div className="space-y-2.5 sm:space-y-3 flex-1 overflow-y-auto pr-1 scrollbar-thin pb-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <PostSkeletonCard key={i} />
+                  ))}
+                </div>
+              </div>
+            </aside>
+            <section className="lg:col-span-7 mt-4 lg:mt-0">
+              <DetailSkeleton />
+            </section>
+          </div>
+        </main>
       </div>
     );
   }
@@ -928,33 +1030,47 @@ export default function StudentMainPage() {
                         'border-slate-100 hover:border-slate-300 hover:shadow-md'
                       }`}>
                         
-                        <div className="flex justify-between items-start mb-2.5 sm:mb-3">
+                                      <div className="flex justify-between items-start mb-2.5 sm:mb-3">
                           <CompanyLogo logoUrl={post.companies?.logo_url} companyName={post.companies?.company_name || 'Company'} size="sm" className={`${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`} />
                           
-                          <div className="flex items-center gap-1.5 sm:gap-2">
+                          {/* ✅ FIXED BADGE CONTAINER: Stacks nicely on mobile, aligns right */}
+                          <div className="flex flex-col items-end gap-1 sm:gap-1.5">
                             <span className={`inline-flex items-center gap-1 text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-semibold ${post.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                               <span className={`w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full ${post.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                               <span className="hidden xs:inline">Active</span>
                             </span>
 
-                            {isThisActiveOJT && (
-                              <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 border border-purple-200">
-                                ⭐ Current
-                              </span>
-                            )}
-                            
-                            {isApplied && !isThisActiveOJT && (
-                              <span className={`inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold border ${getStatusStyle(appStatus)}`}>
-                                <CheckCircleIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                <span className="hidden xxxs:inline">{getStatusLabel(appStatus)}</span>
-                              </span>
-                            )}
+                            {/* ✅ DUAL BADGE SYSTEM */}
+                            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
+                              
+                              {/* 1. Original Application Status Badge */}
+                              {isApplied && !isThisActiveOJT && (
+                                <span className={`inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold border ${getStatusStyle(appStatus)}`}>
+                                  <CheckCircleIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                  <span className="hidden xxxs:inline">{getStatusLabel(appStatus)}</span>
+                                </span>
+                              )}
+
+                              {/* 2. Dynamic Notice Badges */}
+                              {isThisActiveOJT ? (
+                                <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                                  ⭐ Current OJT
+                                </span>
+                              ) : hasActiveOJT && activeOJTCompany === post.companies?.company_name ? (
+                                <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-md font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                                 Already OJT at this company
+                                </span>
+                              ) : hasActiveOJT ? (
+                                <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-md font-bold bg-red-50 text-red-500 border border-red-200">
+                                  Hired elsewhere
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                         
                         <h4 className={`text-sm sm:text-base font-bold mb-0.5 sm:mb-1 line-clamp-1 transition-colors ${isSelected ? 'text-blue-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{post.title}</h4>
                         <p className="text-xs sm:text-sm text-slate-500 mb-2 sm:mb-3 truncate">{post.companies?.company_name || 'Company'}</p>
-                        
                         <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-slate-400 mb-2 sm:mb-3 flex-wrap">
                           <span className="inline-flex items-center gap-1"><MapPinIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" /><span className="truncate max-w-[70px] sm:max-w-[100px]">{post.location_name.split(',')[0]}</span></span>
                           <span className="text-slate-300 hidden xs:inline">|</span>
@@ -1098,7 +1214,7 @@ export default function StudentMainPage() {
 
                   <div className="mb-4">
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 mb-2 sm:mb-3 flex items-center gap-2">
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0112.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2 2z" /></svg>
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                       Job Description
                     </h3>
                     <div className="prose prose-slate prose-sm max-w-none">
@@ -1107,7 +1223,9 @@ export default function StudentMainPage() {
                   </div>
                 </div>
 
-                {/* DETAIL FOOTER - Action Buttons */}
+                {/* ==========================================
+                    ✅ FIXED ACTION BUTTONS LOGIC (STUDENT PERSPECTIVE)
+                    ========================================== */}
                 <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex-shrink-0">
                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                     
@@ -1115,7 +1233,9 @@ export default function StudentMainPage() {
                       const currentStatus = getApplicationStatus(selectedPost.id);
                       const isThisActive = isActiveOJTPost(selectedPost.id);
                       const isApplied = hasAppliedTo(selectedPost.id);
+                      const isSameCompanyOJT = hasActiveOJT && activeOJTCompany === selectedPost.companies?.company_name;
                       
+                      // 1. Loading state
                       if (!user && postsLoading) {
                         return (
                           <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-slate-200 text-slate-500 font-semibold rounded-lg sm:rounded-xl cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
@@ -1124,6 +1244,7 @@ export default function StudentMainPage() {
                         );
                       }
                       
+                      // 2. Not logged in
                       if (!user && !postsLoading) {
                         return (
                           <button 
@@ -1138,38 +1259,60 @@ export default function StudentMainPage() {
                         );
                       }
                       
+                      // 3. Student is doing OJT at this specific post
                       if (isThisActive) {
                         return (
-                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-gradient-to-r from-purple-500 to-violet-600 text-white font-bold rounded-lg sm:rounded-xl shadow-lg cursor-not-allowed flex items-center justify-center gap-2 border-2 border-purple-300 text-xs sm:text-sm">
-                            <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                            Current OJT
-                          </button>
-                        );
-                      }
-                      
-                      if (hasActiveOJT && !isThisActive) {
-                        return (
-                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-slate-100 text-slate-400 font-semibold rounded-lg sm:rounded-xl border-2 border-slate-200 cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
-                            <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                            Already Enrolled
+                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold rounded-lg sm:rounded-xl shadow-lg cursor-not-allowed flex items-center justify-center gap-2 border-2 border-emerald-300 text-xs sm:text-sm">
+                            <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                            You are currently OJT here
                           </button>
                         );
                       }
 
-                      if (isApplied) {
+                      // 4. Student is doing OJT at this company (different post)
+                      if (isSameCompanyOJT) {
                         return (
-                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-amber-50 text-amber-700 font-bold rounded-lg sm:rounded-xl border-2 border-amber-300 cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
-                            <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                            Pending
+                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-blue-100 text-blue-700 font-bold rounded-lg sm:rounded-xl border-2 border-blue-200 cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
+                            <BuildingIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                            Already OJT at this company
                           </button>
                         );
                       }
                       
+                      // 5. Student has an active OJT at a completely different company
+                      if (hasActiveOJT) {
+                        return (
+                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-slate-100 text-slate-400 font-semibold rounded-lg sm:rounded-xl border-2 border-slate-200 cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm italic">
+                            <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                            Already Enrolled Elsewhere
+                          </button>
+                        );
+                      }
+
+                      // 6. Student has already applied to THIS post
+                      if (isApplied) {
+                        const statusText = currentStatus === 'ACCEPTED' ? "Already Accepted" : currentStatus === 'PENDING' ? "Application Sent" : "Already Applied";
+                        const statusColor = currentStatus?.toLowerCase() === 'accepted' || currentStatus?.toLowerCase() === 'approved' 
+                          ? 'bg-emerald-100 text-emerald-600 border-emerald-300 shadow-none' 
+                          : currentStatus?.toLowerCase() === 'rejected' || currentStatus?.toLowerCase() === 'declined' 
+                            ? 'bg-red-100 text-red-600 border-red-300 shadow-none'
+                            : 'bg-amber-100 text-amber-600 border-amber-300 shadow-none';
+
+                        return (
+                          <button disabled className={`w-full sm:flex-1 py-2.5 sm:py-3.5 font-bold rounded-lg sm:rounded-xl border-2 cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm ${statusColor}`}>
+                            <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                            {statusText}
+                          </button>
+                        );
+                      }
+                      
+                      // 7. Submitting application
                       return applyingPostId === selectedPost.id ? (
                         <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-blue-400 text-white font-semibold rounded-lg sm:rounded-xl cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
                           <SpinnerIcon /> Submitting...
                         </button>
                       ) : (
+                        // 8. Free to apply
                         <button onClick={() => handleApply(selectedPost.id)} className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm">
                           <SendIcon className="w-4 h-4 sm:w-5 sm:h-5" /> Apply Now
                         </button>

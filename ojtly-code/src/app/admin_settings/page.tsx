@@ -65,7 +65,7 @@ export default function AdminSettingsPage() {
     }, 1200);
   };
 
-  // Reusable Toggle Switch Component
+  // Reusable Toggle Switch
   const Toggle = ({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) => (
     <button
       type="button"
@@ -95,9 +95,12 @@ export default function AdminSettingsPage() {
       {/* Mobile Overlay */}
       {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
-      {/* Sidebar */}
+      {/* ============================================ */}
+      {/* SIDEBAR                                     */}
+      {/* ============================================ */}
       <aside className={`fixed top-0 left-0 z-50 h-full w-[280px] max-w-[80vw] bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 overflow-y-auto overflow-x-hidden`}>
-        <div className="p-5 pb-4">
+        
+        <div className="p-5 pb-4 border-b border-white/5">
           <Link href="/" className="flex items-center gap-3" onClick={() => setIsSidebarOpen(false)}>
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 shrink-0"><span className="text-white font-black text-lg">O</span></div>
             <div className="min-w-0">
@@ -107,11 +110,11 @@ export default function AdminSettingsPage() {
           </Link>
         </div>
         
-        <nav className="px-3 space-y-0.5 pb-20">
+        <nav className="px-3 space-y-0.5 py-4 pb-28 overflow-y-auto">
           <p className="px-4 py-2 text-[10px] font-bold tracking-widest text-slate-500 uppercase">Main</p>
           
           <Link href="/admin_main" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all group" onClick={() => setIsSidebarOpen(false)}>
-            <svg className="w-[18px] h-[18px] group-hover:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2-2h-2a2 2 0 01-2-2v-2z" /></svg>
+            <svg className="w-[18px] h-[18px] group-hover:text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
             <span className="truncate">Dashboard</span>
           </Link>
 
@@ -141,55 +144,59 @@ export default function AdminSettingsPage() {
           </Link>
         </nav>
 
-        {/* Bottom Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/5 bg-gradient-to-b from-transparent to-slate-900/90">
-          <div className="flex items-center gap-3 px-3 py-2 mb-2">
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/20 shrink-0">A</div>
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/5 bg-gradient-to-t from-slate-950 via-slate-900 to-transparent">
+          <div className="flex items-center gap-3 px-2 py-2 mb-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/20 shrink-0 ring-2 ring-white/10">A</div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">Admin User</p>
               <p className="text-[11px] text-slate-500 truncate">admin@ojtly.com</p>
             </div>
           </div>
-          <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl font-medium transition-all w-full text-sm">
+          <button onClick={() => router.push('/')} className="flex items-center justify-center gap-2 px-4 py-2.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl font-medium transition-all w-full text-sm active:scale-[0.98]">
             <svg className="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            <span className="truncate">Log out</span>
+            Log out
           </button>
         </div>
       </aside>
 
-      {/* Main Content Area - Perfect Fit */}
-      <div className="lg:ml-[280px] h-screen w-[calc(100vw-280px)] lg:w-auto overflow-hidden flex flex-col">
+      {/* ============================================ */}
+      {/* MAIN CONTENT - fixed, exact remaining space */}
+      {/* ============================================ */}
+      <main className="fixed inset-0 lg:left-[280px] z-10 flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
         
         {/* Header */}
-        <header className="flex-shrink-0 sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 h-14 sm:h-16 w-full overflow-hidden">
-          <div className="h-full flex items-center justify-between px-4 sm:px-6 lg:px-8">
+        <header className="shrink-0 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-sm z-30">
+          <div className="h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-xl shrink-0">
+              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-1 hover:bg-slate-100 rounded-xl active:scale-95 transition-transform shrink-0">
                 <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold text-slate-800 truncate">Settings</h1>
-                <p className="text-[10px] sm:text-[11px] text-slate-400 -mt-0.5 hidden sm:block truncate">Manage your account and platform preferences</p>
+                <h1 className="text-sm sm:text-base lg:text-lg font-bold text-slate-800 truncate leading-tight">Settings</h1>
+                <p className="text-[10px] sm:text-xs text-slate-400 hidden sm:block truncate mt-0.5">Manage your account and platform preferences</p>
               </div>
             </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20 cursor-pointer shrink-0 ml-4">A</div>
+            <div className="relative group cursor-pointer shrink-0 ml-2">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20 transition-shadow group-hover:shadow-lg">A</div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white"></div>
+            </div>
           </div>
         </header>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <form id="admin-settings-form" onSubmit={handleSave} className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+          <form id="admin-settings-form" onSubmit={handleSave} className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-4 sm:space-y-5">
             
             {/* Profile Information */}
             <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+              <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 bg-slate-50/50">
                 <h2 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                   Profile Information
                 </h2>
               </div>
-              <div className="p-5 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 sm:p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="min-w-0">
                     <label htmlFor="name" className="block text-xs font-semibold text-slate-700 mb-1.5">Full Name</label>
                     <input 
@@ -198,7 +205,7 @@ export default function AdminSettingsPage() {
                       name="name" 
                       value={profile.name} 
                       onChange={handleProfileChange} 
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                      className="w-full border border-slate-200 rounded-xl px-3 sm:px-3.5 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
                     />
                   </div>
                   <div className="min-w-0">
@@ -209,7 +216,7 @@ export default function AdminSettingsPage() {
                       name="email" 
                       value={profile.email} 
                       onChange={handleProfileChange} 
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                      className="w-full border border-slate-200 rounded-xl px-3 sm:px-3.5 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
                     />
                   </div>
                 </div>
@@ -223,7 +230,7 @@ export default function AdminSettingsPage() {
                       placeholder="Current password" 
                       value={profile.currentPassword} 
                       onChange={handleProfileChange} 
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                      className="w-full border border-slate-200 rounded-xl px-3 sm:px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
                     />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <input 
@@ -232,7 +239,7 @@ export default function AdminSettingsPage() {
                         placeholder="New password" 
                         value={profile.newPassword} 
                         onChange={handleProfileChange} 
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                        className="w-full border border-slate-200 rounded-xl px-3 sm:px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
                       />
                       <input 
                         type="password" 
@@ -240,7 +247,7 @@ export default function AdminSettingsPage() {
                         placeholder="Confirm new password" 
                         value={profile.confirmPassword} 
                         onChange={handleProfileChange} 
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                        className="w-full border border-slate-200 rounded-xl px-3 sm:px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
                       />
                     </div>
                   </div>
@@ -250,13 +257,13 @@ export default function AdminSettingsPage() {
 
             {/* System Preferences */}
             <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+              <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 bg-slate-50/50">
                 <h2 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   System Preferences
                 </h2>
               </div>
-              <div className="p-5 divide-y divide-slate-100">
+              <div className="p-4 sm:p-5 divide-y divide-slate-100">
                 <div className="flex items-center justify-between py-3 gap-3">
                   <div className="min-w-0 flex-1 pr-2">
                     <p className="text-sm font-medium text-slate-700">Maintenance Mode</p>
@@ -276,13 +283,13 @@ export default function AdminSettingsPage() {
 
             {/* Email Notifications */}
             <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/50">
+              <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 bg-slate-50/50">
                 <h2 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                   Email Notifications
                 </h2>
               </div>
-              <div className="p-5 divide-y divide-slate-100">
+              <div className="p-4 sm:p-5 divide-y divide-slate-100">
                 <div className="flex items-center justify-between py-3 gap-3">
                   <div className="min-w-0 flex-1 pr-2">
                     <p className="text-sm font-medium text-slate-700">New Company Registrations</p>
@@ -301,35 +308,37 @@ export default function AdminSettingsPage() {
             </section>
 
             {/* Danger Zone */}
-            <section className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden mb-24">
-              <div className="px-5 py-3.5 border-b border-red-100 bg-red-50/50">
+            <section className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-red-100 bg-red-50/50">
                 <h2 className="font-bold text-sm text-red-700 flex items-center gap-2">
-                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5h13.856c1.54 0 2.502-1.667 1.732-2.5L17.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
                   Danger Zone
                 </h2>
               </div>
-              <div className="p-5">
+              <div className="p-4 sm:p-5">
                 <p className="text-sm text-slate-600 mb-3.5 leading-relaxed">Irreversible and destructive actions. Please proceed with caution.</p>
                 <button
                   type="button"
                   onClick={() => addToast("Action blocked in demo mode.", "error")}
-                  className="px-5 py-2.5 bg-white border-2 border-red-300 text-red-600 hover:bg-red-50 font-semibold rounded-xl transition-all text-sm whitespace-nowrap"
+                  className="px-4 sm:px-5 py-2.5 bg-white border-2 border-red-300 text-red-600 hover:bg-red-50 active:bg-red-100 font-semibold rounded-xl transition-all text-sm whitespace-nowrap"
                 >
                   Delete All Student Data
                 </button>
               </div>
             </section>
 
+            {/* Bottom spacer for footer */}
+            <div className="h-20 sm:h-24"></div>
           </form>
         </div>
 
-        {/* Fixed Footer */}
-        <footer className="flex-shrink-0 fixed bottom-0 left-0 lg:left-[280px] right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200/60 p-4 z-30">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-end gap-3">
+        {/* Footer - inside main flex column, sticks to bottom */}
+        <footer className="shrink-0 bg-white/80 backdrop-blur-xl border-t border-slate-200/60 p-3 sm:p-4 z-30">
+          <div className="flex justify-end gap-2 sm:gap-3 px-4 sm:px-6 lg:px-8">
             <button 
               type="button" 
               onClick={() => window.history.back()}
-              className="px-5 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-semibold text-sm transition-all"
+              className="px-4 sm:px-5 py-2 sm:py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl font-semibold text-sm transition-all"
             >
               Cancel
             </button>
@@ -337,7 +346,7 @@ export default function AdminSettingsPage() {
               type="submit"
               form="admin-settings-form"
               disabled={isSaving}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-md shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 sm:px-6 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-md shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? (
                 <>
@@ -357,7 +366,7 @@ export default function AdminSettingsPage() {
           </div>
         </footer>
 
-      </div>
+      </main>
 
       <style jsx global>{`
         @keyframes slide-in { 
@@ -366,7 +375,6 @@ export default function AdminSettingsPage() {
         }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
         
-        /* Custom scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 100px; }

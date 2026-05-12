@@ -147,3 +147,122 @@ html, body {
     @apply font-sans;
   }
 }
+/* =========================================
+   AI Featured Card (Inside Features Grid)
+   ========================================= */
+.ai-feature-card {
+  grid-column: 1 / -1; /* Spans the full width of the grid */
+  background: var(--bg-dark);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 2.5rem 3rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle glowing background effect */
+.ai-feature-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -10%;
+  width: 40%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.ai-feature-card:hover {
+  border-color: rgba(16, 185, 129, 0.4);
+  transform: translateY(-5px);
+  box-shadow: 0 15px 30px rgba(15, 23, 42, 0.2);
+}
+
+.ai-feature-content {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  z-index: 2;
+  flex: 1;
+}
+
+.ai-icon-box {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-primary);
+  transition: all var(--transition-fast);
+}
+
+.ai-feature-card:hover .ai-icon-box {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  transform: scale(1.05);
+}
+
+.ai-icon-box svg {
+  width: 28px;
+  height: 28px;
+  stroke: var(--accent-primary);
+}
+
+.ai-feature-text h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.35rem;
+  color: #fff;
+}
+
+.ai-feature-text p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+  margin: 0;
+  max-width: 500px;
+}
+
+.btn-ai {
+  background: linear-gradient(135deg, var(--accent-primary), #34d399);
+  color: var(--bg-dark);
+  font-weight: 700;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+  z-index: 2;
+  white-space: nowrap; /* Prevents button text wrapping */
+}
+
+.btn-ai:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+}
+
+/* Responsive adjustments for AI Card */
+@media (max-width: 768px) {
+  .ai-feature-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 2rem;
+  }
+  
+  .ai-feature-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ai-feature-text p {
+    max-width: 100%;
+  }
+
+  .btn-ai {
+    width: 100%;
+    justify-content: center;
+  }
+}

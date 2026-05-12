@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr'; // ✅ ADDED: Import from @supabase/ssr
+import { createBrowserClient } from '@supabase/ssr';
 
 // ============================================
 // TYPES
@@ -25,6 +25,7 @@ interface Company {
   bir_2303_url?: string;
   contact_person?: string;
   status: string;          
+  is_deleted?: boolean;     // ✅ ADDED: Required for the soft-delete logic
   created_at?: string;
 }
 
@@ -36,7 +37,6 @@ interface PreviewDoc {
 export default function AdminApprovalPage() {
   const router = useRouter();
   
-  // ✅ FIXED: Create browser client from @supabase/ssr
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -75,8 +75,6 @@ export default function AdminApprovalPage() {
     setLoading(true);
     
     try {
-      console.log('🔍 [FETCH] Starting...');
-      
       const { data, error } = await supabase
         .from('companies')
         .select('*')
@@ -88,15 +86,11 @@ export default function AdminApprovalPage() {
         const normalized: Company[] = data.map((c: any) => ({
           ...c,
           name: c.name || c.company_name || 'Unknown Company',
-          // Normalize status: capitalize first letter, rest lowercase
-          status: c.status?.charAt(0).toUpperCase() + c.status?.slice(1)?.toLowerCase() || 'Pending'
+          status: c.status?.charAt(0).toUpperCase() + c.status?.slice(1)?.toLowerCase() || 'Pending',
+          is_deleted: c.is_deleted ?? false // ✅ ADDED: Ensure boolean default
         }));
         
         setCompanies(normalized);
-        
-        const archivedCount = normalized.filter(c => c.status.toLowerCase() === 'archived').length;
-        const activeCount = normalized.filter(c => c.status.toLowerCase() !== 'archived').length;
-        console.log(`📊 Total: ${normalized.length} | Active: ${activeCount} | Archived: ${archivedCount}`);
       } else {
         setCompanies([]);
       }
@@ -115,7 +109,7 @@ export default function AdminApprovalPage() {
   }, []);
 
   // ==========================================
-  // ✅ RESTORE FUNCTION (Moves back to Pending)
+  // ✅ FIX 1: RESTORE FUNCTION (Moves back to Pending)
   // ==========================================
   const handleRestore = async (companyId: string) => {
     setActionLoading(true);
@@ -123,15 +117,21 @@ export default function AdminApprovalPage() {
     try {
       const { error } = await supabase
         .from('companies')
-        .update({ status: 'pending' })
+        .update({ 
+          is_deleted: false,  // ✅ This moves it out of trash
+          status: 'Pending'   // ✅ This moves it back to the Pending list
+        })
         .eq('id', companyId);
         
       if (error) throw error;
       
-      addToast("Company restored to Pending! 🔄", 'info');
-      setIsDrawerOpen(false);
+      // ✅ FIX 3: Instant local state removal (Fixes Double Action bug)
+      setCompanies((prev) => prev.filter((c) => c.id !== companyId));
       setSelectedCompany(null);
-      fetchCompanies();
+      setIsDrawerOpen(false);
+      
+      addToast("Company restored to Pending! 🔄", 'info');
+      fetchCompanies(); // Refresh to sync counts perfectly
       
     } catch (error: any) {
       addToast(error.message, 'error');
@@ -148,15 +148,21 @@ export default function AdminApprovalPage() {
     try {
       const { error } = await supabase
         .from('companies')
-        .update({ status: 'archived' })
+        .update({ 
+          status: 'Archived',
+          is_deleted: true // ✅ ADDED: Mark as deleted in database
+        })
         .eq('id', companyId);
         
       if (error) throw error;
       
-      addToast("Company moved to Trash! 🗑️", 'info');
-      setIsDrawerOpen(false);
+      // ✅ FIX 3: Instant local state removal (Fixes Double Action bug)
+      setCompanies((prev) => prev.filter((c) => c.id !== companyId));
       setSelectedCompany(null);
-      fetchCompanies();
+      setIsDrawerOpen(false);
+      
+      addToast("Company moved to Trash! 🗑️", 'info');
+      fetchCompanies(); 
       
     } catch (error: any) {
       addToast(error.message, 'error');
@@ -165,70 +171,55 @@ export default function AdminApprovalPage() {
     }
   };
 
- // ==========================================
-// ✅ UPDATED: Dual-Update Approval Function
-// Updates BOTH status AND is_approved at once!
-// ==========================================
-const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 'rejected') => {
-  if (!selectedCompany) return;
-  setActionLoading(true);
-  
-  try {
-    console.log(`🔄 [ACTION] Updating company ${companyId} to status: ${newStatus}`);
+  // ==========================================
+  // ✅ UPDATED: Dual-Update Approval Function
+  // ==========================================
+  const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 'rejected') => {
+    if (!selectedCompany) return;
+    setActionLoading(true);
     
-    // ✅ DUAL-UPDATE LOGIC: Update both fields simultaneously
-    const { error } = await supabase
-      .from('companies')
-      .update({ 
-        status: newStatus,                    // ✅ Field 1: Status text
-        is_approved: newStatus === 'approved'   // ✅ Field 2: Boolean flag
-      })
-      .eq('id', companyId);
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ 
+          status: newStatus,                    
+          is_approved: newStatus === 'approved',
+          is_deleted: false // ✅ Ensure it's not marked as deleted
+        })
+        .eq('id', companyId);
 
-    if (error) {
-      console.error('❌ Update Error:', error.message, error.code, error.details);
-      throw error;
+      if (error) throw error;
+
+      if (newStatus === 'approved') {
+        addToast("✅ Company approved! They can now post OJT opportunities.", 'success');
+      } else {
+        addToast("❌ Company rejected. They have been notified.", 'error');
+      }
+      
+      setIsDrawerOpen(false);
+      setSelectedCompany(null);
+      fetchCompanies(); 
+      
+    } catch (error: any) {
+      addToast(error.message || `Failed to ${newStatus} company`, 'error');
+    } finally {
+      setActionLoading(false);
     }
-
-    console.log(`✅ Company ${newStatus} successfully!`);
-    console.log('   → status:', newStatus);
-    console.log('   → is_approved:', newStatus === 'approved');
-
-    // Success toast with details
-    if (newStatus === 'approved') {
-      addToast("✅ Company approved! They can now post OJT opportunities.", 'success');
-    } else {
-      addToast("❌ Company rejected. They have been notified.", 'error');
-    }
-    
-    setIsDrawerOpen(false);
-    setSelectedCompany(null);
-    fetchCompanies(); // Refresh list
-    
-  } catch (error: any) {
-    console.error('💥 Action Failed:', error);
-    addToast(error.message || `Failed to ${newStatus} company`, 'error');
-  } finally {
-    setActionLoading(false);
-  }
-};
+  };
 
   // ==========================================
-  // ✅ FIXED COUNTS - "All" EXCLUDES ARCHIVED!
+  // ✅ FIX 2: FIXED COUNTS - Using is_deleted instead of status
   // ==========================================
   const getCounts = () => {
-    // Separate archived from active companies
-    const activeCompanies = companies.filter(c => c.status.toLowerCase() !== 'archived');
-    const archivedCompanies = companies.filter(c => c.status.toLowerCase() === 'archived');
+    const activeCompanies = companies.filter(c => !c.is_deleted);
+    const trashCompanies = companies.filter(c => c.is_deleted);
     
     return {
-      // ✅ "All" now ONLY counts active (non-archived) companies
       all: activeCompanies.length,
       pending: activeCompanies.filter(c => c.status.toLowerCase() === 'pending').length,
       approved: activeCompanies.filter(c => c.status.toLowerCase() === 'approved').length,
       rejected: activeCompanies.filter(c => c.status.toLowerCase() === 'rejected').length,
-      // Archived is counted separately
-      archived: archivedCompanies.length,
+      archived: trashCompanies.length, // ✅ Trash count relies on boolean flag
     };
   };
 
@@ -236,14 +227,16 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
   const openDrawer = (company: Company) => { setSelectedCompany(company); setIsDrawerOpen(true); };
 
   // ==========================================
-  // ✅ FIXED FILTERING - Exclude archived from all tabs except "Archived"
+  // ✅ FIX 2: FIXED FILTERING - Using is_deleted
   // ==========================================
   const getDisplayedCompanies = () => {
     let filtered = companies;
     
-    // ✅ KEY FIX: If NOT on Archived tab, exclude archived items!
+    // ✅ KEY FIX: Use is_deleted boolean instead of just status text
     if (activeTab !== 'Archived') {
-      filtered = filtered.filter(c => c.status.toLowerCase() !== 'archived');
+      filtered = filtered.filter(c => !c.is_deleted);
+    } else {
+      filtered = filtered.filter(c => c.is_deleted);
     }
     
     // Apply search filter
@@ -260,9 +253,6 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
     if (activeTab !== 'All' && activeTab !== 'Archived') {
       filtered = filtered.filter(c => c.status.toLowerCase() === activeTab.toLowerCase());
     }
-    
-    // If we're on Archived tab, only show archived (already handled above)
-    // If we're on All tab, show everything except archived (already handled above)
     
     return filtered;
   };
@@ -284,7 +274,7 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
   };
 
   // ==========================================
-  // RENDER UI (rest stays the same)
+  // RENDER UI (Remains the same)
   // ==========================================
   return (
     <div className="h-screen w-full overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50/30 font-sans">
@@ -495,13 +485,13 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
                 <div className="space-y-4">
                   {displayedCompanies.map((company) => (
                     <div key={company.id} className={`bg-white rounded-2xl border shadow-sm hover:shadow-lg transition-all duration-200 p-5 sm:p-6 ${
-                      activeTab === 'Archived' ? 'border-slate-300 opacity-75' : 'border-slate-100 hover:border-slate-200'
+                      company.is_deleted ? 'border-slate-300 opacity-75' : 'border-slate-100 hover:border-slate-200'
                     }`}>
                       
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <div className="flex items-center gap-4 flex-1 min-w-0">
                           <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl flex items-center justify-center font-bold text-xl sm:text-2xl shrink-0 border ${
-                            company.status?.toLowerCase() === 'archived' ? 
+                            company.is_deleted ? 
                             'bg-slate-200 text-slate-600 border-slate-300' : 
                             'bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 border-blue-100'
                           }`}>
@@ -510,7 +500,7 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
                           
                           <div className="min-w-0 flex-1">
                             <h3 className={`font-bold text-base sm:text-lg truncate ${
-                              company.status?.toLowerCase() === 'archived' ? 'text-slate-500 line-through' : 'text-slate-800'
+                              company.is_deleted ? 'text-slate-500 line-through' : 'text-slate-800'
                             }`}>
                               {company.name || company.company_name || 'Unnamed Company'}
                             </h3>
@@ -521,16 +511,16 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
                         
                         <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                           <span className={`text-xs sm:text-sm font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg uppercase tracking-wide border shrink-0 ${
+                            company.is_deleted ? 'bg-slate-200 text-slate-600 border-slate-300' :
                             company.status?.toLowerCase() === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-200' :
                             company.status?.toLowerCase() === 'approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                             company.status?.toLowerCase() === 'rejected' ? 'bg-red-50 text-red-600 border-red-200' :
-                            company.status?.toLowerCase() === 'archived' ? 'bg-slate-200 text-slate-600 border-slate-300' :
                             'bg-slate-50 text-slate-600 border-slate-200'
                           }`}>
-                            {company.status || 'Unknown'}
+                            {company.is_deleted ? 'Archived' : company.status || 'Unknown'}
                           </span>
                           
-                          {activeTab === 'Archived' ? (
+                          {company.is_deleted ? (
                             /* RESTORE BUTTON IN LIST VIEW */
                             <button 
                               onClick={() => handleRestore(company.id)}
@@ -615,12 +605,12 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
                     <h3 className="text-xl font-bold text-slate-800 truncate">{selectedCompany.name || selectedCompany.company_name}</h3>
                     <p className="text-base text-slate-500 mt-1">{selectedCompany.industry || 'Business'}</p>
                     <span className={`inline-block mt-2 text-xs font-bold px-3 py-1 rounded-lg uppercase tracking-wide ${
+                      selectedCompany.is_deleted ? 'bg-slate-200 text-slate-600' :
                       selectedCompany.status?.toLowerCase() === 'pending' ? 'bg-amber-100 text-amber-700' :
                       selectedCompany.status?.toLowerCase() === 'approved' ? 'bg-emerald-100 text-emerald-700' :
                       selectedCompany.status?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-700' :
-                      selectedCompany.status?.toLowerCase() === 'archived' ? 'bg-slate-200 text-slate-600' :
                       'bg-slate-100 text-slate-700'
-                    }`}>{selectedCompany.status || 'Unknown Status'}</span>
+                    }`}>{selectedCompany.is_deleted ? 'Archived' : selectedCompany.status || 'Unknown Status'}</span>
                   </div>
                 </div>
 
@@ -721,7 +711,7 @@ const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 're
               {/* ACTION FOOTER */}
               <div className="p-6 border-t border-slate-100 bg-white space-y-3 shrink-0">
                 
-                {selectedCompany.status?.toLowerCase() === 'archived' ? (
+                {selectedCompany.is_deleted ? (
                   /* ARCHIVED STATE: Show Restore button */
                   <div className="space-y-3">
                     <div className="w-full py-4 bg-slate-100 text-slate-600 font-bold text-lg rounded-xl text-center border border-slate-200">
