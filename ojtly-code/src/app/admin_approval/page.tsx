@@ -1,9 +1,11 @@
 'use client';
-
+export const dynamic = 'force-dynamic';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/utils/supabase/client';
+import AdminNotificationBell from '@/components/AdminNotificationBell';
+import FloatingChatButton from '@/components/FloatingChatButton';
 
 // ============================================
 // TYPES
@@ -25,7 +27,7 @@ interface Company {
   bir_2303_url?: string;
   contact_person?: string;
   status: string;          
-  is_deleted?: boolean;     // ✅ ADDED: Required for the soft-delete logic
+  is_deleted?: boolean;     
   created_at?: string;
 }
 
@@ -34,13 +36,13 @@ interface PreviewDoc {
   name: string;
 }
 
+// ✅ Singleton Supabase client via @/utils/supabase/client (matches the rest
+// of the project — admin_main, student_*, company_*). createClient() returns
+// the cached browser instance, so this is initialized once per session.
+const supabase = createClient();
+
 export default function AdminApprovalPage() {
   const router = useRouter();
-  
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
   
   // STATE MANAGEMENT
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -71,7 +73,7 @@ export default function AdminApprovalPage() {
   // ==========================================
   // DATA FETCHING
   // ==========================================
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     setLoading(true);
     
     try {
@@ -87,7 +89,7 @@ export default function AdminApprovalPage() {
           ...c,
           name: c.name || c.company_name || 'Unknown Company',
           status: c.status?.charAt(0).toUpperCase() + c.status?.slice(1)?.toLowerCase() || 'Pending',
-          is_deleted: c.is_deleted ?? false // ✅ ADDED: Ensure boolean default
+          is_deleted: c.is_deleted ?? false 
         }));
         
         setCompanies(normalized);
@@ -102,14 +104,14 @@ export default function AdminApprovalPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast]);
 
   useEffect(() => { 
     fetchCompanies(); 
-  }, []);
+  }, [fetchCompanies]);
 
   // ==========================================
-  // ✅ FIX 1: RESTORE FUNCTION (Moves back to Pending)
+  // FIX 1: RESTORE FUNCTION 
   // ==========================================
   const handleRestore = async (companyId: string) => {
     setActionLoading(true);
@@ -118,20 +120,19 @@ export default function AdminApprovalPage() {
       const { error } = await supabase
         .from('companies')
         .update({ 
-          is_deleted: false,  // ✅ This moves it out of trash
-          status: 'Pending'   // ✅ This moves it back to the Pending list
+          is_deleted: false,  
+          status: 'Pending'   
         })
         .eq('id', companyId);
         
       if (error) throw error;
       
-      // ✅ FIX 3: Instant local state removal (Fixes Double Action bug)
       setCompanies((prev) => prev.filter((c) => c.id !== companyId));
       setSelectedCompany(null);
       setIsDrawerOpen(false);
       
       addToast("Company restored to Pending! 🔄", 'info');
-      fetchCompanies(); // Refresh to sync counts perfectly
+      fetchCompanies(); 
       
     } catch (error: any) {
       addToast(error.message, 'error');
@@ -150,13 +151,12 @@ export default function AdminApprovalPage() {
         .from('companies')
         .update({ 
           status: 'Archived',
-          is_deleted: true // ✅ ADDED: Mark as deleted in database
+          is_deleted: true 
         })
         .eq('id', companyId);
         
       if (error) throw error;
       
-      // ✅ FIX 3: Instant local state removal (Fixes Double Action bug)
       setCompanies((prev) => prev.filter((c) => c.id !== companyId));
       setSelectedCompany(null);
       setIsDrawerOpen(false);
@@ -172,7 +172,7 @@ export default function AdminApprovalPage() {
   };
 
   // ==========================================
-  // ✅ UPDATED: Dual-Update Approval Function
+  // DUAL-UPDATE APPROVAL FUNCTION
   // ==========================================
   const handleUpdateStatus = async (companyId: string, newStatus: 'approved' | 'rejected') => {
     if (!selectedCompany) return;
@@ -184,7 +184,7 @@ export default function AdminApprovalPage() {
         .update({ 
           status: newStatus,                    
           is_approved: newStatus === 'approved',
-          is_deleted: false // ✅ Ensure it's not marked as deleted
+          is_deleted: false 
         })
         .eq('id', companyId);
 
@@ -208,7 +208,7 @@ export default function AdminApprovalPage() {
   };
 
   // ==========================================
-  // ✅ FIX 2: FIXED COUNTS - Using is_deleted instead of status
+  // FIXED COUNTS & FILTERING
   // ==========================================
   const getCounts = () => {
     const activeCompanies = companies.filter(c => !c.is_deleted);
@@ -219,27 +219,22 @@ export default function AdminApprovalPage() {
       pending: activeCompanies.filter(c => c.status.toLowerCase() === 'pending').length,
       approved: activeCompanies.filter(c => c.status.toLowerCase() === 'approved').length,
       rejected: activeCompanies.filter(c => c.status.toLowerCase() === 'rejected').length,
-      archived: trashCompanies.length, // ✅ Trash count relies on boolean flag
+      archived: trashCompanies.length, 
     };
   };
 
   const counts = getCounts();
   const openDrawer = (company: Company) => { setSelectedCompany(company); setIsDrawerOpen(true); };
 
-  // ==========================================
-  // ✅ FIX 2: FIXED FILTERING - Using is_deleted
-  // ==========================================
   const getDisplayedCompanies = () => {
     let filtered = companies;
     
-    // ✅ KEY FIX: Use is_deleted boolean instead of just status text
     if (activeTab !== 'Archived') {
       filtered = filtered.filter(c => !c.is_deleted);
     } else {
       filtered = filtered.filter(c => c.is_deleted);
     }
     
-    // Apply search filter
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
       filtered = filtered.filter(c => {
@@ -249,7 +244,6 @@ export default function AdminApprovalPage() {
       });
     }
     
-    // Apply tab filter (but not for "All" since we already filtered)
     if (activeTab !== 'All' && activeTab !== 'Archived') {
       filtered = filtered.filter(c => c.status.toLowerCase() === activeTab.toLowerCase());
     }
@@ -259,12 +253,10 @@ export default function AdminApprovalPage() {
 
   const displayedCompanies = getDisplayedCompanies();
 
-  // Helper: Check if URL exists
   const hasDocument = (url?: string | null): boolean => {
     return !!url && url !== '' && url !== 'null' && url !== '#';
   };
 
-  // Preview Modal
   const openPreview = (url: string, name: string) => {
     setPreviewDoc({ url, name });
   };
@@ -274,7 +266,7 @@ export default function AdminApprovalPage() {
   };
 
   // ==========================================
-  // RENDER UI (Remains the same)
+  // RENDER UI
   // ==========================================
   return (
     <div className="h-screen w-full overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50/30 font-sans">
@@ -386,6 +378,7 @@ export default function AdminApprovalPage() {
           
           {/* HEADER */}
           <header className="flex-shrink-0 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 h-16 sm:h-18 w-full shadow-sm z-20">
+          
             <div className="px-5 sm:px-6 lg:px-8 h-full flex items-center justify-between max-w-full">
               
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -404,7 +397,9 @@ export default function AdminApprovalPage() {
                 </div>
               </div>
 
-              <div className="shrink-0 ml-2"></div>
+              <div className="shrink-0 ml-2 flex items-center">
+              <AdminNotificationBell />
+            </div>
             </div>
           </header>
 
@@ -830,6 +825,7 @@ export default function AdminApprovalPage() {
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
         html, body { overflow-x: hidden; width: 100%; height: 100%; }
       `}</style>
+      <FloatingChatButton />
     </div>
   );
 }

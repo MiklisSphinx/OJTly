@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr'; // ✅ CHANGED: Using @supabase/ssr
+import CompanyNotificationBell from '@/components/CompanyNotificationBell';
+import CompanyChat from '@/components/CompanyChat';
 
 // ============================================
 // 📋 TYPE DEFINITIONS
@@ -44,6 +46,67 @@ export default function CompanyDocuments() {
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionChecked, setSessionChecked] = useState(false); // ✅ NEW: Track if we've checked session
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+    const [showChat, setShowChat] = useState(false);
+  // ===== Chat unread badge counts =====
+  const [studentUnread, setStudentUnread] = useState(0);
+  const [adminSupportUnread, setAdminSupportUnread] = useState(0);
+  const totalChatUnread = studentUnread + adminSupportUnread;
+
+// Chat unread badge — 2 separate channels (student + admin support), same as applicants page
+useEffect(() => {
+  if (!authUserId || !companyData?.id) return;
+
+  const fetchStudentUnread = async () => {
+    const { data: convs } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`participant_a.eq.${authUserId},participant_b.eq.${authUserId}`);
+    const convIds = (convs || []).map((c: any) => c.id);
+    if (convIds.length === 0) {
+      setStudentUnread(0);
+      return;
+    }
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', convIds)
+      .neq('sender_id', authUserId)
+      .eq('is_read', false);
+    setStudentUnread(count || 0);
+  };
+
+  const fetchAdminSupportUnread = async () => {
+    const { count } = await supabase
+      .from('support_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyData?.id)
+      .eq('sender_role', 'admin')
+      .eq('is_read', false);
+    setAdminSupportUnread(count || 0);
+  };
+
+  fetchStudentUnread();
+  fetchAdminSupportUnread();
+
+  const studentChannel = supabase
+    .channel(`student-unread:${authUserId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchStudentUnread)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchStudentUnread)
+    .subscribe();
+
+  const adminSupportChannel = supabase
+    .channel(`admin-support-unread:${companyData?.id}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyData?.id}` }, fetchAdminSupportUnread)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyData?.id}` }, fetchAdminSupportUnread)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(studentChannel);
+    supabase.removeChannel(adminSupportChannel);
+  };
+}, [authUserId, companyData?.id]);
+
 
   // ✅ FIXED: Use createBrowserClient from @supabase/ssr
   const supabase = createBrowserClient(
@@ -74,6 +137,7 @@ export default function CompanyDocuments() {
       }
 
       console.log('✅ Session OK:', session.user.id);
+      setAuthUserId(session.user.id);
 
      const { data, error } = await supabase
   .from('companies')
@@ -215,7 +279,7 @@ if (error) {
       <div className="min-h-screen bg-slate-100 font-sans">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} router={router} />
         <main className="lg:ml-64 min-h-screen">
-          <Header title="Company Documents" onMenuClick={() => setIsSidebarOpen(true)} />
+          <Header title="Company Documents" onMenuClick={() => setIsSidebarOpen(true)} companyName={companyData?.company_name || ''} companyId={companyData?.id || null} userId={authUserId} />
           <div className="p-8 max-w-4xl mx-auto flex items-center justify-center min-h-[400px]">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
@@ -245,7 +309,7 @@ if (error) {
 
       {/* Main Content */}
       <main className="lg:ml-64 min-h-screen">
-        <Header title="Company Documents" onMenuClick={() => setIsSidebarOpen(true)} />
+        <Header title="Company Documents" onMenuClick={() => setIsSidebarOpen(true)} companyName={companyData?.company_name || ''} companyId={companyData?.id || null} userId={authUserId} />
 
         <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
           
@@ -619,6 +683,36 @@ if (error) {
         </div>
       )}
 
+      {/* 💬 Floating Chat Bubble — single teal button with red unread badge */}
+      {authUserId && (
+        <button
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center"
+          title={`Messages${totalChatUnread > 0 ? ` · ${totalChatUnread} unread` : ''}`}
+        >
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          {totalChatUnread > 0 && (
+            <>
+              <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-50"></span>
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md">
+                {totalChatUnread > 9 ? '9+' : totalChatUnread}
+              </span>
+            </>
+          )}
+        </button>
+      )}
+
+      {/* 💬 Company Chat Modal */}
+      {showChat && authUserId && (
+        <CompanyChat
+          userId={authUserId}
+          companyName={companyData?.company_name || 'Company'}
+          onClose={() => setShowChat(false)}
+        />
+      )}
+
     </div>
   );
 }
@@ -675,7 +769,13 @@ function Sidebar({ isOpen, onClose, router }: {
 // 🧩 HEADER COMPONENT (unchanged)
 // ============================================
 
-function Header({ title, onMenuClick }: { title: string; onMenuClick: () => void }) {
+function Header({ title, onMenuClick, companyName, companyId, userId }: { 
+  title: string; 
+  onMenuClick: () => void;
+  companyName: string;
+  companyId: string | null;
+  userId: string | null;
+}) {
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 h-16">
       <div className="max-w-4xl mx-auto px-4 h-full flex items-center justify-between">
@@ -687,12 +787,12 @@ function Header({ title, onMenuClick }: { title: string; onMenuClick: () => void
           </button>
           <h1 className="text-lg font-bold text-slate-800">{title}</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold text-slate-700">John Doe</p>
-            <p className="text-xs text-slate-400">Acme Corp</p>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <span className="hidden sm:block text-sm text-slate-500 font-medium truncate max-w-[150px]">{companyName || 'Company'}</span>
+          <CompanyNotificationBell companyId={companyId} userId={userId} />
+          <div className="w-9 h-9 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
+            {companyName.charAt(0)?.toUpperCase() || 'C'}
           </div>
-          <div className="w-9 h-9 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-sm border-2 border-white shadow-sm">JD</div>
         </div>
       </div>
     </header>

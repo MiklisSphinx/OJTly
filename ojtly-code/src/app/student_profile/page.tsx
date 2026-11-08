@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import type { User } from '@supabase/supabase-js';
+import NotificationBell from '@/components/NotificationBell';
+import ChatPanel from '@/components/ChatPanel';
+import GeofenceCheckIn from '@/components/GeofenceCheckIn';
+import StudentAnalytics from '@/components/StudentAnalytics';
+import StudentCertificate from '@/components/StudentCertificate';
 
 const STORAGE_BUCKETS = {
   AVATARS: 'avatars',
@@ -61,6 +66,9 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState('');
+  const [portfolioLinks, setPortfolioLinks] = useState<{name: string; url: string}[]>([]);
+  const [portfolioName, setPortfolioName] = useState('');
+  const [portfolioUrl, setPortfolioUrl] = useState('');
 
   const [progress, setProgress] = useState<OJTProgress>({
     completed: 0,
@@ -77,12 +85,16 @@ export default function ProfilePage() {
   const [dailyHours, setDailyHours] = useState<number>(8);
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [companyUserId, setCompanyUserId] = useState<string | null>(null);
+  const [chatUnread, setChatUnread] = useState(0);
 
   const [tempUser, setTempUser] = useState<UserProfile>(user);
-  const [tempCompany, setTempCompany] = useState('');
-  const [tempTotal, setTempTotal] = useState<number>(500);
+  // ❌ REMOVED: tempCompany, tempTotal, isProgressModalOpen — the student
+  // can no longer edit required_hours or assigned_company. Those values
+  // come from the accepted application's post (duration_hours) and the
+  // company_name on that post, both read-only.
 
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -96,7 +108,7 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    if (isProfileModalOpen || isProgressModalOpen || isCalendarModalOpen) {
+    if (isProfileModalOpen || isCalendarModalOpen) {
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
       document.body.style.width = '100%';
@@ -115,11 +127,8 @@ export default function ProfilePage() {
       document.body.style.width = '';
       document.body.style.top = '';
     };
-  }, [isProfileModalOpen, isProgressModalOpen, isCalendarModalOpen]);
+  }, [isProfileModalOpen, isCalendarModalOpen]);
 
-  // ==========================================
-  // 📡 FETCH DATA ON MOUNT
-  // ==========================================
   useEffect(() => {
     let mounted = true;
 
@@ -158,16 +167,18 @@ export default function ProfilePage() {
           setUser(mappedData);
           setTempUser(mappedData);
           setSkills(profile.skills || []);
+          setPortfolioLinks(profile.portfolio_links || []);
 
-          // ✅ Correct FK path: applications -> ojt_posts (via post_id) -> companies (via company_id)
-          // ilike for case-insensitive match, any cast to bypass TS array inference
           const { data: applicationData, error: fetchError } = await supabase
             .from('applications')
             .select(`
               status,
               ojt_posts:post_id (
+                duration_hours,
+                title,
                 companies:company_id (
-                  company_name
+                  company_name,
+                  user_id
                 )
               )
             `)
@@ -175,24 +186,43 @@ export default function ProfilePage() {
             .ilike('status', 'accepted')
             .maybeSingle();
 
-          console.log("🔍 RAW applicationData:", JSON.stringify(applicationData, null, 2));
-          console.log("🔍 fetchError:", fetchError);
-          console.log("🔍 userId:", userId);
-
-          // Cast to any — FK aliases return single objects at runtime, TS just can't tell
           const fetchedCompanyName: string | undefined = (applicationData as any)?.ojt_posts?.companies?.company_name;
-
-          // Normalize to lowercase once — all downstream checks compare 'accepted'
+          const fetchedCompanyUserId: string | undefined = (applicationData as any)?.ojt_posts?.companies?.user_id;
+          // ✅ Pull required_hours from the POST (duration_hours) — this is the
+          // source of truth set by the company when creating the post. We fall
+          // back to profile.required_hours only if the post doesn't have it.
+          const fetchedPostDurationHours: number | undefined = (applicationData as any)?.ojt_posts?.duration_hours;
           const currentAppStatus: string | null = applicationData?.status?.toLowerCase() ?? null;
 
           let companyName = profile.assigned_company || "";
 
           if (currentAppStatus === 'accepted' && fetchedCompanyName) {
             companyName = fetchedCompanyName;
+            if (fetchedCompanyUserId) {
+              setCompanyUserId(fetchedCompanyUserId);
+            } else {
+              const { data: companyRow } = await supabase
+                .from('companies')
+                .select('user_id')
+                .eq('company_name', companyName)
+                .maybeSingle();
+              if (companyRow?.user_id) {
+                setCompanyUserId(companyRow.user_id);
+              }
+            }
             await supabase
               .from('profiles')
               .update({ assigned_company: companyName })
               .eq('id', userId);
+          } else if (currentAppStatus === 'accepted' && companyName) {
+            const { data: companyRow } = await supabase
+              .from('companies')
+              .select('user_id')
+              .eq('company_name', companyName)
+              .maybeSingle();
+            if (companyRow?.user_id) {
+              setCompanyUserId(companyRow.user_id);
+            }
           }
 
           if (companyName && currentAppStatus === 'accepted') {
@@ -201,21 +231,32 @@ export default function ProfilePage() {
               company: companyName,
               status: profile.ojt_status === 'Completed' ? 'Completed' : 'Ongoing',
               appStatus: currentAppStatus,
-              completed: Number(profile.ojt_hours_completed) || prev.completed,
-              total: Number(profile.required_hours) || prev.total
+              // ✅ Use the post's duration_hours (set by company) as the
+              // required total. This is read-only — the student can no longer
+              // edit it from the profile (the edit pencil + modal were
+              // removed). Falls back to profile.required_hours if the post
+              // doesn't have duration_hours set.
+              total: Number(fetchedPostDurationHours) || Number(profile.required_hours) || prev.total
+              // NOTE: 'completed' is intentionally NOT set here — fetchTotalHours()
+              // below populates it from ALL verified attendance_logs so the bar
+              // reflects the all-time total, not just the current month.
             }));
-            setTempCompany(companyName);
+            // ❌ REMOVED: setTempCompany(companyName) — tempCompany state was
+            // deleted along with the edit modal.
           } else {
             setProgress(prev => ({
               ...prev,
-              completed: Number(profile.ojt_hours_completed) || prev.completed,
+              company: '',
               total: Number(profile.required_hours) || prev.total,
               status: profile.ojt_status || 'Not Started',
               appStatus: currentAppStatus
             }));
-            setTempTotal(Number(profile.required_hours) || 500);
+            // ❌ REMOVED: setTempTotal(...) — tempTotal state was deleted.
           }
 
+          // Drive progress.completed from ALL verified logs (across all months)
+          await fetchTotalHours(userId);
+          // And separately refresh the calendar dots for the current month
           await fetchAttendanceData(userId, currentMonth, currentYear);
         }
       } catch (error) {
@@ -248,9 +289,13 @@ export default function ProfilePage() {
 
           if (currentCompanyName !== progress.company) {
             setProgress(p => ({ ...p, company: currentCompanyName }));
-            setTempCompany(currentCompanyName);
+            // ❌ REMOVED: setTempCompany(currentCompanyName) — tempCompany
+            // state was deleted along with the edit modal.
           }
 
+          // Re-sync ALL-time hours on focus/visibility (cheap query, fixes
+          // the bug where returning to the tab showed stale 0 hours)
+          await fetchTotalHours(user.id);
           await fetchAttendanceData(user.id, currentMonth, currentYear);
         }, 500);
       }
@@ -266,6 +311,49 @@ export default function ProfilePage() {
     };
   }, [progress.company, currentMonth, currentYear]);
 
+  // ============================================================
+  // 💬 CHAT UNREAD BADGE — count unread messages from company + realtime
+  // ============================================================
+  useEffect(() => {
+    if (!user.id) return;
+
+    const fetchUnread = async () => {
+      try {
+        // Find all conversations where this student is a participant
+        const { data: convs } = await supabase
+          .from('conversations')
+          .select('id')
+          .or(`participant_a.eq.${user.id},participant_b.eq.${user.id}`);
+        const convIds = (convs || []).map((c: any) => c.id);
+        if (convIds.length === 0) {
+          setChatUnread(0);
+          return;
+        }
+        // Count unread messages NOT sent by me
+        const { count } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .in('conversation_id', convIds)
+          .neq('sender_id', user.id)
+          .eq('is_read', false);
+        setChatUnread(count || 0);
+      } catch (err) {
+        console.error('💬 Unread count error:', err);
+      }
+    };
+
+    fetchUnread();
+
+    // Realtime — update when new messages arrive or are read
+    const channel = supabase
+      .channel(`profile-chat-unread:${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchUnread)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user.id, supabase]);
+
   const getAuthenticatedUser = async (): Promise<User | null> => {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -280,36 +368,18 @@ export default function ProfilePage() {
     }
   };
 
-  // ==========================================
-  // 🛠 SKILLS MANAGEMENT LOGIC
-  // ==========================================
   const syncSkillsToDB = useCallback(async (newSkills: string[]) => {
     try {
       const authUser = await getAuthenticatedUser();
-      console.log('[Skills Sync] Attempting sync for User ID:', authUser?.id);
       if (!authUser) throw new Error('Session Lost');
-
-      console.log('[Skills Sync] Is Array:', Array.isArray(newSkills));
-      console.log('[Skills Sync] Value:', newSkills);
-
       const { data, error } = await supabase
         .from('profiles')
-        .update({
-          skills: newSkills,
-          updated_at: new Date().toISOString()
-        })
+        .update({ skills: newSkills, updated_at: new Date().toISOString() })
         .eq('id', authUser.id)
         .select('skills');
-
-      if (error) {
-        console.error('[Skills Sync] Full Error Object:', error);
-        throw error;
-      }
-      console.log('[Skills Sync] Success! DB Response:', data);
+      if (error) throw error;
     } catch (err: any) {
-      console.error("[Skills Sync] Critical Failure:", err);
-      const msg = err?.message || 'Unknown database error';
-      showToast(`Failed to save skills: ${msg}`, 'error');
+      showToast(`Failed to save skills: ${err?.message}`, 'error');
     }
   }, []);
 
@@ -334,9 +404,40 @@ export default function ProfilePage() {
     syncSkillsToDB(updatedSkills);
   };
 
-  // ==========================================
-  // END SKILLS LOGIC
-  // ==========================================
+  const syncPortfolioToDB = useCallback(async (newLinks: {name: string; url: string}[]) => {
+    try {
+      const authUser = await getAuthenticatedUser();
+      if (!authUser) throw new Error('Session Lost');
+      const { error } = await supabase
+        .from('profiles')
+        .update({ portfolio_links: newLinks, updated_at: new Date().toISOString() })
+        .eq('id', authUser.id);
+      if (error) throw error;
+    } catch (err: any) {
+      showToast(`Failed to save portfolio: ${err.message}`, 'error');
+    }
+  }, [showToast]);
+
+  const addPortfolioLink = () => {
+    const name = portfolioName.trim();
+    const url = portfolioUrl.trim();
+    if (!name || !url) return;
+    if (!url.startsWith('http')) {
+      showToast('URL must start with http:// or https://', 'error');
+      return;
+    }
+    const updated = [...portfolioLinks, { name, url }];
+    setPortfolioLinks(updated);
+    setPortfolioName('');
+    setPortfolioUrl('');
+    syncPortfolioToDB(updated);
+  };
+
+  const removePortfolioLink = (index: number) => {
+    const updated = portfolioLinks.filter((_, i) => i !== index);
+    setPortfolioLinks(updated);
+    syncPortfolioToDB(updated);
+  };
 
   const detectLocation = async () => {
     if (!navigator.geolocation) {
@@ -394,33 +495,70 @@ export default function ProfilePage() {
     );
   };
 
+  const normalizeLogDate = (raw?: string): string => (raw ? raw.split('T')[0] : '');
+
+  // fetchTotalHours: sums ALL verified attendance_logs across all months
+  // — but ONLY for the CURRENT (non-archived) OJT. Archived logs from a
+  // previously-completed OJT are excluded so the bar starts fresh at 0
+  // when the student begins a new OJT. The certificate generator reads
+  // archived=true separately to compute hours for the finished OJT.
+  const fetchTotalHours = async (userId: string) => {
+    if (!userId) return 0;
+    try {
+      const { data, error } = await supabase
+        .from('attendance_logs')
+        .select('hours_rendered')
+        .eq('student_id', userId)
+        .eq('verification_status', 'verified')
+        .eq('archived', false);
+      if (error) throw error;
+      const total = (data || []).reduce((s: number, r: any) => s + (Number(r.hours_rendered) || 0), 0);
+      setProgress(prev => ({ ...prev, completed: total }));
+      return total;
+    } catch (err: any) {
+      // Supabase often returns {} — extract a real message
+      const msg =
+        err?.message ||
+        err?.details ||
+        err?.hint ||
+        err?.code ||
+        (err?.error && typeof err.error === 'string' ? err.error : null) ||
+        JSON.stringify(err);
+      console.error('❌ fetchTotalHours error:', msg, err);
+      return 0;
+    }
+  };
+
+  // fetchAttendanceData: fetches the SELECTED MONTH's verified logs for the
+  // calendar dots and the "X days this month" counter. It no longer touches
+  // progress.completed — that's owned by fetchTotalHours so the bar stays
+  // correct even when the selected month has no entries.
   const fetchAttendanceData = async (userId: string, month?: number, year?: number) => {
     if (!userId) return;
     try {
-      let query = supabase.from('attendance_logs').select('*').eq('student_id', userId);
+      let query = supabase.from('attendance_logs').select('*').eq('student_id', userId).eq('verification_status', 'verified').eq('archived', false);
       if (month !== undefined && year !== undefined) {
-        const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
         const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-        const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${lastDayOfMonth}`;
-        query = query.gte('log_date', startDate).lte('log_date', endDate);
+        const nextMonthIdx = month === 11 ? 0 : month + 1;
+        const nextYear = month === 11 ? year + 1 : year;
+        const endDateExclusive = `${nextYear}-${String(nextMonthIdx + 1).padStart(2, '0')}-01`;
+        query = query.gte('log_date', startDate).lt('log_date', endDateExclusive);
       }
       query = query.order('log_date', { ascending: true });
       const { data: attendanceData, error: attendanceError } = await query;
       if (attendanceError) throw attendanceError;
       if (attendanceData && attendanceData.length > 0) {
         const dateSet = new Set<string>();
-        let totalHoursFromDB = 0;
-        attendanceData.forEach((record: AttendanceEntry) => {
-          dateSet.add(record.log_date);
-          totalHoursFromDB += record.hours_rendered || 8;
+        const normalizedRecords = (attendanceData as AttendanceEntry[]).map((record) => {
+          const normalized = { ...record, log_date: normalizeLogDate(record.log_date) };
+          dateSet.add(normalized.log_date);
+          return normalized;
         });
         setAttendedDays(dateSet);
-        setAttendanceRecords(attendanceData as AttendanceEntry[]);
-        setProgress(prev => ({ ...prev, completed: totalHoursFromDB }));
+        setAttendanceRecords(normalizedRecords);
       } else {
         setAttendedDays(new Set());
         setAttendanceRecords([]);
-        setProgress(prev => ({ ...prev, completed: 0 }));
       }
       return attendanceData;
     } catch (err) {
@@ -429,44 +567,10 @@ export default function ProfilePage() {
     }
   };
 
+  // ✅ FIXED: GPS-only attendance. Clicking calendar days just shows a message.
   const handleDayClick = async (day: number) => {
-    if (!progress.company) {
-      showToast('You must be assigned to a company to mark attendance.', 'error');
-      return;
-    }
-    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    try {
-      const authUser = await getAuthenticatedUser();
-      if (!authUser) throw new Error('Session Lost. Please log in again.');
-      setIsSaving(true);
-      const existingRecord = attendanceRecords.find(r => r.log_date === dateStr);
-      if (existingRecord) {
-        const { error: deleteError } = await supabase.from('attendance_logs').delete().eq('id', existingRecord.id);
-        if (deleteError) throw deleteError;
-        setAttendedDays(prev => { const s = new Set(prev); s.delete(dateStr); return s; });
-        setAttendanceRecords(prev => prev.filter(r => r.id !== existingRecord.id));
-        const removedHours = existingRecord.hours_rendered || dailyHours;
-        const newTotalHours = Math.max(0, progress.completed - removedHours);
-        setProgress(prev => ({ ...prev, completed: newTotalHours }));
-        await supabase.from('profiles').update({ ojt_hours_completed: newTotalHours }).eq('id', authUser.id);
-        showToast(`Removed ${dateStr} (-${removedHours}h)`, 'info');
-      } else {
-        const { data: newRecord, error: insertError } = await supabase.from('attendance_logs').insert({
-          student_id: authUser.id, log_date: dateStr, status: 'present' as const, hours_rendered: dailyHours
-        }).select().single();
-        if (insertError) throw insertError;
-        const newDays = new Set(attendedDays); newDays.add(dateStr); setAttendedDays(newDays);
-        if (newRecord) setAttendanceRecords(prev => [...prev, newRecord as AttendanceEntry]);
-        const newTotalHours = progress.completed + dailyHours;
-        setProgress(prev => ({ ...prev, completed: newTotalHours }));
-        await supabase.from('profiles').update({ ojt_hours_completed: newTotalHours }).eq('id', authUser.id);
-        showToast(`Marked ${dateStr} (+${dailyHours}h)!`, 'success');
-      }
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update attendance', 'error');
-    } finally {
-      setIsSaving(false);
-    }
+    showToast('📍 Use the GPS Check-In above to mark your daily attendance.', 'info');
+    return;
   };
 
   const handleSaveProfile = async () => {
@@ -491,12 +595,15 @@ export default function ProfilePage() {
           .getPublicUrl(uploadData?.path || `${authUser.id}/avatar`);
         avatarUrl = publicUrl;
       }
+      // ✅ REMOVED from the upsert payload: assigned_company, required_hours,
+      // ojt_status. The student should NOT be able to overwrite these from
+      // their profile edit — they're set by the company's post (duration_hours)
+      // and the accept/finish-OJT flows. Only personal fields are saved here.
       const { error } = await supabase.from('profiles').upsert({
         id: authUser.id, email: authUser.email, full_name: tempUser.name.trim(),
         course: tempUser.course.trim(), location: tempUser.location.trim(),
         school_name: tempUser.school.trim(), year_level: tempUser.yearLevel,
-        avatar_url: avatarUrl, assigned_company: progress.company || tempCompany,
-        required_hours: Number(progress.total || tempTotal), ojt_status: progress.status,
+        avatar_url: avatarUrl,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
       if (error) throw error;
@@ -513,25 +620,10 @@ export default function ProfilePage() {
     } finally { setIsSaving(false); }
   };
 
-  const handleSaveProgress = async () => {
-    let finalTotal = Math.max(1, Math.min(2000, Number(tempTotal) || 500));
-    setIsSaving(true);
-    try {
-      const authUser = await getAuthenticatedUser();
-      if (!authUser) throw new Error('Session Lost');
-      const { error } = await supabase.from('profiles').update({
-        required_hours: finalTotal, assigned_company: tempCompany.trim(),
-        ojt_status: progress.completed >= finalTotal ? 'Completed' : 'Ongoing',
-        updated_at: new Date().toISOString()
-      }).eq('id', authUser.id);
-      if (error) throw error;
-      setProgress(prev => ({ ...prev, company: tempCompany.trim(), total: finalTotal }));
-      setIsProgressModalOpen(false);
-      router.refresh();
-      showToast('Updated!', 'success');
-    } catch (err: any) { showToast(err.message || 'Update failed', 'error'); }
-    finally { setIsSaving(false); }
-  };
+  // ❌ REMOVED: handleSaveProgress — no longer needed because the
+  // "Update OJT Details" modal was deleted. The student can't edit
+  // required_hours or assigned_company anymore. Those values come from
+  // the company's post (duration_hours) and the accepted application.
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -621,18 +713,21 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 h-14 sm:h-16">
-        <div className="max-w-4xl mx-auto px-3 sm:px-4 h-full flex items-center justify-between">
-          <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 rounded-full transition-colors -ml-1">
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 h-14 sm:h-16">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 h-full flex items-center justify-between gap-2">
+          <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 rounded-full transition-colors -ml-1 shrink-0">
             <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
             </svg>
           </button>
-          <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate px-2">My Profile</h1>
-          <Link href="/" className="flex items-center gap-1.5 sm:gap-2 text-lg sm:text-xl font-bold text-slate-900 shrink-0">
-            <span className="text-blue-600 text-base sm:text-xl">◉</span>
-            <span className="hidden xs:inline">OJTly</span>
-          </Link>
+          <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate px-2 flex-1 text-center">My Profile</h1>
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <NotificationBell />
+            <Link href="/" className="flex items-center gap-1.5 sm:gap-2 text-lg sm:text-xl font-bold text-slate-900">
+              <span className="text-blue-600 text-base sm:text-xl">◉</span>
+              <span className="hidden xs:inline">OJTly</span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -663,6 +758,32 @@ export default function ProfilePage() {
                     </svg>
                   </button>
                 </div>
+                {(() => {
+                  const checks = [
+                    !!user.name && user.name !== 'Student',
+                    !!user.course && user.course !== 'N/A',
+                    !!user.school && user.school !== 'Not specified',
+                    user.location !== 'Not specified' && !!user.location,
+                    !!user.yearLevel,
+                    !!user.avatar,
+                    !!user.resumeUrl,
+                    skills.length > 0,
+                    portfolioLinks.length > 0,
+                  ];
+                  const completed = checks.filter(Boolean).length;
+                  const pct = Math.round((completed / checks.length) * 100);
+                  return (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-[10px] text-blue-200 mb-1">
+                        <span>Profile Completion</span>
+                        <span className="font-bold text-white">{pct}%</span>
+                      </div>
+                      <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-500 ${pct === 100 ? 'bg-emerald-400' : 'bg-white'}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             <button
@@ -687,14 +808,11 @@ export default function ProfilePage() {
               }`}>
                 {progress.status}
               </span>
-              <button
-                onClick={() => { setTempCompany(progress.company); setTempTotal(progress.total); setIsProgressModalOpen(true); }}
-                className="p-1.5 sm:p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                </svg>
-              </button>
+              {/* ❌ REMOVED: the edit pencil button that opened the "Update OJT
+                  Details" modal. The student should NOT be able to edit
+                  required_hours or assigned_company — those come from the
+                  company's post (duration_hours) and the accepted application.
+                  The whole modal + handleSaveProgress were also removed. */}
             </div>
           </div>
 
@@ -730,7 +848,6 @@ export default function ProfilePage() {
                 <span className={`text-[10px] sm:text-xs block font-medium ${
                   progress.company ? 'text-emerald-600' : 'text-slate-400'
                 }`}>Company</span>
-
                 {isLoading ? (
                   <div className="h-4 w-24 bg-slate-200 rounded animate-pulse mt-1" />
                 ) : (
@@ -740,7 +857,6 @@ export default function ProfilePage() {
                     {progress.company || 'Not assigned yet'}
                   </span>
                 )}
-
                 {progress.appStatus === 'accepted' && progress.company && !isLoading && (
                   <div className="mt-1 flex items-center gap-1.5">
                     <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2">
@@ -774,14 +890,20 @@ export default function ProfilePage() {
                   : 'text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed'
               }`}
             >
-              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
               </svg>
-              📅 Mark Attendance ({attendedDays.size} days)
+              📅 View Attendance ({attendedDays.size} days)
               {!progress.company && <span className="text-[10px] sm:text-xs ml-1 opacity-70">(Assign company first)</span>}
             </button>
           </div>
         </div>
+
+        {/* GPS Check-In widget */}
+        {user.id && <GeofenceCheckIn studentId={user.id} />}
+        {user.id && <StudentCertificate studentId={user.id} />}
+        {/* Analytics dashboard */}
+        {user.id && <StudentAnalytics studentId={user.id} />}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-100">
@@ -845,6 +967,67 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1 ml-1">Used for matching OJT posts (KNN)</p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-500">Portfolio Links</label>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${portfolioLinks.length >= 5 ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-400'}`}>
+                    {portfolioLinks.length}/5
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-3 min-h-[32px]">
+                  {portfolioLinks.length > 0 ? portfolioLinks.map((link, i) => (
+                    <a
+                      key={i}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
+                    >
+                      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                      <span className="truncate max-w-[120px]">{link.name}</span>
+                      <button
+                        onClick={(e) => { e.preventDefault(); removePortfolioLink(i); }}
+                        className="ml-0.5 shrink-0 hover:text-red-500 transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </a>
+                  )) : (
+                    <span className="text-xs text-slate-400 italic py-1">No portfolio links yet</span>
+                  )}
+                </div>
+
+                {portfolioLinks.length < 5 ? (
+                  <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                    <input
+                      type="text"
+                      value={portfolioName}
+                      onChange={(e) => setPortfolioName(e.target.value)}
+                      placeholder="Name (e.g. GitHub)"
+                      className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-shadow placeholder:text-slate-400"
+                    />
+                    <input
+                      type="url"
+                      value={portfolioUrl}
+                      onChange={(e) => setPortfolioUrl(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPortfolioLink(); } }}
+                      placeholder="https://..."
+                      className="flex-[2] min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-shadow placeholder:text-slate-400"
+                    />
+                    <button
+                      onClick={addPortfolioLink}
+                      disabled={!portfolioName.trim() || !portfolioUrl.trim()}
+                      className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg disabled:opacity-40 hover:bg-blue-700 transition-colors shrink-0 sm:self-stretch"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-500 italic py-2">Maximum 5 links reached. Remove one to add another.</p>
+                )}
+                <p className="text-[10px] text-slate-400 mt-1 ml-1">Companies can view these when reviewing your application</p>
               </div>
             </div>
           </div>
@@ -1063,71 +1246,10 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {isProgressModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm"
-          style={{ touchAction: 'none', overflow: 'hidden' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setIsProgressModalOpen(false); }}
-        >
-          <div
-            className="bg-white rounded-xl sm:rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
-            style={{ touchAction: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-base sm:text-lg font-bold text-slate-800">Update OJT Details</h3>
-              <button
-                onClick={() => setIsProgressModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
-              <div>
-                <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Required Hours (1-2000)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="2000"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-indigo-500 outline-none text-sm sm:text-base"
-                  value={tempTotal}
-                  onChange={(e) => setTempTotal(Number(e.target.value) || 0)}
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Company Name</label>
-                <input
-                  type="text"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-indigo-500 outline-none text-sm sm:text-base"
-                  value={tempCompany}
-                  onChange={(e) => setTempCompany(e.target.value)}
-                  placeholder="e.g., Google Philippines"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 sm:p-6 border-t border-slate-100 flex gap-2 sm:gap-3 bg-slate-50">
-              <button
-                onClick={() => setIsProgressModalOpen(false)}
-                className="flex-1 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-100 text-sm sm:text-base transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveProgress}
-                disabled={isSaving}
-                className="flex-1 py-2.5 sm:py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 text-sm sm:text-base transition-colors active:scale-[0.98]"
-              >
-                {isSaving ? 'Updating...' : 'Update'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ❌ REMOVED: the "Update OJT Details" modal used to live here. It
+          let the student edit required_hours + assigned_company, which
+          overwrote the values set by the company's post. The whole modal
+          is gone — the student profile is now read-only for OJT details. */}
 
       {isCalendarModalOpen && (
         <div
@@ -1221,8 +1343,8 @@ export default function ProfilePage() {
 
               {attendedDays.size === 0 && (
                 <div className="text-center py-6 sm:py-8 text-slate-400">
-                  <p className="text-xs sm:text-sm font-medium">No attendance marked</p>
-                  <p className="text-[10px] sm:text-xs mt-1">Tap a day to start</p>
+                  <p className="text-xs sm:text-sm font-medium">No attendance yet</p>
+                  <p className="text-[10px] sm:text-xs mt-1">Use GPS Check-In above to mark attendance</p>
                 </div>
               )}
             </div>
@@ -1240,29 +1362,6 @@ export default function ProfilePage() {
                 >
                   Today
                 </button>
-              </div>
-
-              <div className="bg-white rounded-xl p-2.5 sm:p-3 border border-slate-200">
-                <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                  <label className="text-[10px] sm:text-xs font-bold text-slate-600">⏰ Hours/day:</label>
-                  <span className="text-xs sm:text-sm font-bold text-slate-800">{attendedDays.size * dailyHours}h</span>
-                </div>
-                <div className="grid grid-cols-5 gap-1">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(h => (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => setDailyHours(h)}
-                      className={`py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-bold transition-all active:scale-95 ${
-                        dailyHours === h
-                          ? 'bg-slate-800 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {h}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -1288,6 +1387,72 @@ export default function ProfilePage() {
           overscroll-behavior: contain;
         }
       `}</style>
+
+      {user.id && (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-1">
+          {(() => {
+            const canChat = progress.appStatus === 'accepted' && progress.company && progress.status !== 'Completed' && companyUserId;
+            const reason = !canChat
+              ? progress.status === 'Completed' ? 'Chat archived'
+              : progress.appStatus !== 'accepted' ? 'Not accepted yet'
+              : !companyUserId ? 'Loading...'
+              : 'Unavailable'
+              : '';
+
+            return (
+              <>
+                <button
+                  onClick={() => canChat && setShowChat(true)}
+                  disabled={!canChat}
+                  className={`w-14 h-14 rounded-full shadow-lg transition-all flex items-center justify-center relative ${
+                    canChat
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={canChat ? `Message ${progress.company}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}` : reason}
+                >
+                  <svg className="w-7 h-7 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  {!canChat && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
+                      </svg>
+                    </span>
+                  )}
+                  {/* 🔴 Red badge + 🟢 blue pulsing ring when there are unread messages */}
+                  {canChat && chatUnread > 0 && (
+                    <>
+                      {/* Blue pulsing ring — matches the button color */}
+                      <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
+                      {/* Red badge with unread count */}
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md z-10">
+                        {chatUnread > 9 ? '9+' : chatUnread}
+                      </span>
+                    </>
+                  )}
+                </button>
+                {!canChat && (
+                  <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
+                    {reason}
+                  </span>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {showChat && user.id && companyUserId && (
+        <ChatPanel
+          myUserId={user.id}
+          otherUserId={companyUserId}
+          myName={user.name}
+          otherName={progress.company}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }

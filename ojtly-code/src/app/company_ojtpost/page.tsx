@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import CompanyNotificationBell from '@/components/CompanyNotificationBell';
+import CompanyChat from '@/components/CompanyChat';
 
 interface OJTPost {
   id: string;
@@ -131,6 +133,13 @@ export default function CompanyPostsPage() {
   const [posts, setPosts] = useState<OJTPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [companyName, setCompanyName] = useState('');
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+    const [showChat, setShowChat] = useState(false);
+  // ===== Chat unread badge counts =====
+  const [studentUnread, setStudentUnread] = useState(0);
+  const [adminSupportUnread, setAdminSupportUnread] = useState(0);
+  const totalChatUnread = studentUnread + adminSupportUnread;
+  const [companyRecordId, setCompanyRecordId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error' | 'info' | 'warning';
@@ -139,7 +148,62 @@ export default function CompanyPostsPage() {
 
   const supabase = createClient();
 
-  const showNotification = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
+  
+// Chat unread badge — 2 separate channels (student + admin support), same as applicants page
+useEffect(() => {
+  if (!authUserId || !companyRecordId) return;
+
+  const fetchStudentUnread = async () => {
+    const { data: convs } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`participant_a.eq.${authUserId},participant_b.eq.${authUserId}`);
+    const convIds = (convs || []).map((c: any) => c.id);
+    if (convIds.length === 0) {
+      setStudentUnread(0);
+      return;
+    }
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', convIds)
+      .neq('sender_id', authUserId)
+      .eq('is_read', false);
+    setStudentUnread(count || 0);
+  };
+
+  const fetchAdminSupportUnread = async () => {
+    const { count } = await supabase
+      .from('support_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyRecordId)
+      .eq('sender_role', 'admin')
+      .eq('is_read', false);
+    setAdminSupportUnread(count || 0);
+  };
+
+  fetchStudentUnread();
+  fetchAdminSupportUnread();
+
+  const studentChannel = supabase
+    .channel(`student-unread:${authUserId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchStudentUnread)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchStudentUnread)
+    .subscribe();
+
+  const adminSupportChannel = supabase
+    .channel(`admin-support-unread:${companyRecordId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyRecordId}` }, fetchAdminSupportUnread)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyRecordId}` }, fetchAdminSupportUnread)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(studentChannel);
+    supabase.removeChannel(adminSupportChannel);
+  };
+}, [authUserId, companyRecordId]);
+
+const showNotification = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 4000);
   };
@@ -170,11 +234,15 @@ export default function CompanyPostsPage() {
         }
 
         setCompanyName(company.company_name);
+        setAuthUserId(user.id);
+        setCompanyRecordId(company.id);
 
-        const { data: postsData, error: postsErr } = await supabase
+                 const { data: postsData, error: postsErr } = await supabase
           .from('ojt_posts')
           .select('*, companies(company_name)')
           .eq('company_id', company.id)
+          .eq('is_deleted', false)
+          .neq('status', 'taken_down')
           .order('created_at', { ascending: false });
 
         if (postsErr) {
@@ -217,6 +285,14 @@ export default function CompanyPostsPage() {
       alert("Still Protected. Try disabling RLS temporarily in Supabase for ojt_posts.");
       setDeleteLoading(null);
     } else {
+      // 🧹 Clean up orphaned notifications referencing this deleted post
+      if (authUserId) {
+        await supabase
+          .from('notifications')
+          .delete()
+          .like('link_url', `%${postId}%`)
+          .eq('user_id', authUserId);
+      }
       alert("Success! Post deleted.");
       setPosts(prev => prev.filter(p => p.id !== postId));
       setDeleteLoading(null);
@@ -509,6 +585,7 @@ export default function CompanyPostsPage() {
             </div>
             <div className="flex items-center gap-3 sm:gap-4 shrink-0">
               <span className="hidden sm:block text-sm text-slate-500 font-medium truncate max-w-[150px]">{companyName}</span>
+              <CompanyNotificationBell companyId={companyRecordId} userId={authUserId} />
               <div className="w-9 h-9 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm">
                 {companyName.charAt(0)?.toUpperCase() || 'C'}
               </div>
@@ -717,6 +794,36 @@ export default function CompanyPostsPage() {
         }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
+
+      {/* 💬 Floating Chat Bubble — single teal button with red unread badge */}
+      {authUserId && (
+        <button
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center"
+          title={`Messages${totalChatUnread > 0 ? ` · ${totalChatUnread} unread` : ''}`}
+        >
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          {totalChatUnread > 0 && (
+            <>
+              <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-50"></span>
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md">
+                {totalChatUnread > 9 ? '9+' : totalChatUnread}
+              </span>
+            </>
+          )}
+        </button>
+      )}
+
+      {/* 💬 Company Chat Modal */}
+      {showChat && authUserId && (
+        <CompanyChat
+          userId={authUserId}
+          companyName={companyName}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }

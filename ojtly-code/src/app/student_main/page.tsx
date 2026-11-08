@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
+import NotificationBell from '@/components/NotificationBell';   // ← add this line
+import ChatPanel from '@/components/ChatPanel';
+
 
 // ==========================================
 // INTERFACES
@@ -376,6 +379,8 @@ export default function StudentMainPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState('All Cities');
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [studentName, setStudentName] = useState('');
   const [studentInitial, setStudentInitial] = useState('S');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -383,11 +388,57 @@ export default function StudentMainPage() {
   const [applyingPostId, setApplyingPostId] = useState<string | null>(null);
   const [hasActiveOJT, setHasActiveOJT] = useState(false);
   const [activeOJTCompany, setActiveOJTCompany] = useState<string>('');
+  const [showChat, setShowChat] = useState(false);
+  const [companyUserId, setCompanyUserId] = useState<string | null>(null);
+  const [chatUnread, setChatUnread] = useState(0);
   const [activeOJTPostId, setActiveOJTPostId] = useState<string>('');
   const [notification, setNotification] = useState<{
     type: 'success' | 'error' | 'info' | 'warning';
     message: string;
   } | null>(null);
+
+  // 💬 Resolve company's auth UID for chat (when student is accepted)
+  useEffect(() => {
+    if (hasActiveOJT && activeOJTCompany && !companyUserId) {
+      (async () => {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('user_id')
+          .eq('company_name', activeOJTCompany)
+          .maybeSingle();
+        if (company?.user_id) setCompanyUserId(company.user_id);
+      })();
+    }
+  }, [hasActiveOJT, activeOJTCompany, companyUserId, supabase]);
+
+  // 💬 Chat unread badge — count unread messages from company + realtime
+  useEffect(() => {
+    if (!currentUserId) return;
+    const fetchUnread = async () => {
+      try {
+        const { data: convs } = await supabase
+          .from('conversations')
+          .select('id')
+          .or(`participant_a.eq.${currentUserId},participant_b.eq.${currentUserId}`);
+        const convIds = (convs || []).map((c: any) => c.id);
+        if (convIds.length === 0) { setChatUnread(0); return; }
+        const { count } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .in('conversation_id', convIds)
+          .neq('sender_id', currentUserId)
+          .eq('is_read', false);
+        setChatUnread(count || 0);
+      } catch (err) { console.error('💬 Unread count error:', err); }
+    };
+    fetchUnread();
+    const ch = supabase
+      .channel(`main-chat-unread:${currentUserId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchUnread)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [currentUserId, supabase]);
 
   const showNotification = (type: 'success' | 'error' | 'info' | 'warning', message: string) => {
     setNotification({ type, message });
@@ -642,6 +693,101 @@ export default function StudentMainPage() {
   };
 
   // ==========================================
+  // 🔔 NOTIFY COMPANY OF NEW APPLICANT
+  // Called after a successful applications.insert().
+  // Resolves: post title + company's auth UID (via ojt_posts.company_id → companies.user_id)
+  // then INSERTs a row into `notifications` addressed to that company user.
+  // Fire-and-forget — application already succeeded, so failures here are non-fatal.
+  // ==========================================
+  const notifyCompanyOfNewApplicant = async ({ postId, studentId }: { postId: string; studentId: string }) => {
+    try {
+      // 1. Post title + company user_id + company_name in one joined query.
+      const { data: postInfo, error: postErr } = await supabase
+        .from('ojt_posts')
+        .select(`
+          title,
+          companies ( user_id, company_name )
+        `)
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postErr || !postInfo) {
+        console.warn('🔔 Could not load post/company for notification:', postErr);
+        return;
+      }
+
+      // FK join may come back as object or array depending on Postgrest config
+      const company = Array.isArray((postInfo as any).companies)
+        ? (postInfo as any).companies[0]
+        : (postInfo as any).companies;
+      const companyUserId = company?.user_id;
+      const companyName = company?.company_name;
+      const postTitle = (postInfo as any).title || 'your OJT post';
+
+      if (!companyUserId) {
+        console.warn('🔔 Post has no company user_id; skipping notification.');
+        return;
+      }
+
+      // 2. Get student's full name. Use cached studentName state first, else fetch from profiles.
+      let studentFullName = studentName || '';
+      if (!studentFullName) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', studentId)
+          .maybeSingle();
+        if (profile?.full_name) {
+          studentFullName = profile.full_name;
+          setStudentName(profile.full_name);  // cache for subsequent applies
+        }
+      }
+      if (!studentFullName) studentFullName = 'A student';
+
+      // 3. INSERT notification addressed to the COMPANY user.
+      const title = `New applicant for "${postTitle}"`;
+      const message = `${studentFullName} applied for your OJT post${companyName ? ` at ${companyName}` : ''}.`;
+      const linkUrl = `/company_applicants?post_id=${postId}`;
+
+      // 🛡️ DUPLICATE GUARD: check if a notification with the SAME
+      //    user_id + link_url + message already exists. This prevents
+      //    double-notify if the helper fires twice (race condition,
+      //    React StrictMode double-invoke, or double-click).
+      const { data: existingNotif } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', companyUserId)
+        .eq('link_url', linkUrl)
+        .eq('message', message)
+        .maybeSingle();
+
+      if (existingNotif) {
+        console.log('🔔 Duplicate notification detected for post', postId, '— skipping');
+        return;
+      }
+
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: companyUserId,
+        title,
+        message,
+        is_read: false,
+        type: 'application_update',
+        link_url: linkUrl,
+        created_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+
+      if (notifErr) {
+        console.error('🔔 notifications INSERT failed:', JSON.stringify(notifErr, null, 2));
+      } else {
+        console.log('🔔 Company notified of new applicant for post', postId);
+      }
+    } catch (err) {
+      console.error('🔔 notifyCompanyOfNewApplicant crashed (non-fatal):', err);
+    }
+  };
+
+  // ==========================================
   // ✅ CORRECT handleApply (WITH SAFETY CHECK)
   // ==========================================
   const handleApply = async (postId: string) => {
@@ -662,6 +808,13 @@ export default function StudentMainPage() {
 
     if (hasAppliedTo(postId)) {
       showNotification('warning', 'You have already applied to this position');
+      return;
+    }
+
+    // ✅ NEW: Check if the post has available slots
+    const post = posts.find((p: any) => p.id === postId);
+    if (post && (post.vacancies ?? 0) <= 0) {
+      showNotification('warning', 'This position has no available slots');
       return;
     }
 
@@ -687,14 +840,40 @@ export default function StudentMainPage() {
         return;
       }
 
+      // 🔧 Resolve company_id for this post BEFORE inserting the application.
+      //    student_main has the post in `posts` state (with companies joined),
+      //    so look it up there first. If not found (edge case: post not in
+      //    cached list), fall back to a fresh query. The company_id column
+      //    on applications is required by other parts of the app
+      //    (e.g. the company notification bell) to filter rows.
+      let companyId: string | undefined;
+      const cachedPost = posts.find((p: any) => p.id === postId);
+      if (cachedPost?.companies) {
+        const c = Array.isArray(cachedPost.companies) ? cachedPost.companies[0] : cachedPost.companies;
+        companyId = c?.id;
+      }
+      if (!companyId) {
+        const { data: fetchedPost } = await supabase
+          .from('ojt_posts')
+          .select('company_id')
+          .eq('id', postId)
+          .maybeSingle();
+        companyId = fetchedPost?.company_id;
+      }
+
+      const applicationRow: Record<string, unknown> = {
+        post_id: postId,
+        student_id: userId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      };
+      if (companyId) {
+        applicationRow.company_id = companyId;
+      }
+
       const { error: insertError } = await supabase
         .from('applications')
-        .insert([{
-          post_id: postId,
-          student_id: userId,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-        }])
+        .insert([applicationRow])
         .select();
 
       if (insertError) {
@@ -706,6 +885,11 @@ export default function StudentMainPage() {
         }
         throw new Error(insertError.message || 'Failed to submit application');
       }
+
+      // 🔔 NEW: Fire a notification to the company so their bell lights up.
+      // Non-blocking — application already succeeded, so notification failures
+      // are logged but never shown to the student.
+      notifyCompanyOfNewApplicant({ postId, studentId: userId });
 
       setApplicationStatuses(prev => new Map(prev).set(postId, 'pending'));
       showNotification('success', 'Application submitted successfully!');
@@ -721,6 +905,50 @@ export default function StudentMainPage() {
   // ==========================================
   // CLICK HANDLERS
   // ==========================================
+  // 🔖 SAVE / UNSAVE POST
+  const toggleSavePost = async (postId: string) => {
+    if (!currentUserId) return;
+    const isSaved = savedPostIds.has(postId);
+    
+    // Optimistic update
+    setSavedPostIds(prev => {
+      const next = new Set(prev);
+      if (isSaved) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+
+    try {
+      if (isSaved) {
+        await supabase.from('saved_posts').delete().eq('student_id', currentUserId).eq('post_id', postId);
+      } else {
+        await supabase.from('saved_posts').insert({ student_id: currentUserId, post_id: postId });
+      }
+    } catch (err) {
+      // Revert on failure
+      setSavedPostIds(prev => {
+        const next = new Set(prev);
+        if (isSaved) next.add(postId);
+        else next.delete(postId);
+        return next;
+      });
+    }
+  };
+
+  // Load saved posts
+  useEffect(() => {
+    if (!currentUserId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('saved_posts')
+        .select('post_id')
+        .eq('student_id', currentUserId);
+      if (data) {
+        setSavedPostIds(new Set(data.map((s: any) => s.post_id)));
+      }
+    })();
+  }, [currentUserId, supabase]);
+
   const handlePostClick = (post: OJTPost) => {
     if (!post) return;
     setSelectedPost(post);
@@ -782,16 +1010,18 @@ export default function StudentMainPage() {
     const matchesSearch = !searchQuery || 
       post.title.toLowerCase().includes(searchLower) ||
       (post.companies?.company_name || '').toLowerCase().includes(searchLower) ||
-      post.location_name.toLowerCase().includes(searchLower) ||
+     (post.location_name || '').toLowerCase().includes(searchLower)||
       formatSkills(post.skills).some((skill: any) => skill.toLowerCase().includes(searchLower));
     
     const matchesCity = selectedCity === 'All Cities' || 
-      post.location_name.toLowerCase().includes(selectedCity.toLowerCase());
+    (post.location_name || '').toLowerCase().includes(selectedCity.toLowerCase());
+
+    const matchesSaved = !showSavedOnly || savedPostIds.has(post.id);
     
-    return matchesSearch && matchesCity;
+    return matchesSearch && matchesCity && matchesSaved;
   });
 
-  const cities = ['All Cities', ...new Set(posts.filter((p: any) => p).map((p: any) => p.location_name.split(',')[0].trim()))];
+ const cities = ['All Cities', ...new Set(posts.filter((p: any) => p && p.location_name).map((p: any) => p.location_name.split(',')[0].trim()))];
 
   // ==========================================
   // ✅ UPDATED LOADING STATE WITH SKELETONS
@@ -899,27 +1129,30 @@ export default function StudentMainPage() {
           <nav className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-full">
             <Link href="/student_main" className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium bg-white text-blue-600 rounded-full shadow-sm transition-all duration-200">Find OJT</Link>
             <Link href="/map" className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-slate-600 rounded-full hover:bg-white/50 transition-all duration-200">Map</Link>
+            <Link href="/student_applications" className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-slate-600 rounded-full hover:bg-white/50 transition-all duration-200">Applications</Link>
             <Link href="/studentai" className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-slate-600 rounded-full hover:bg-white/50 transition-all duration-200">AI Assistant</Link>
           </nav>
 
-          <div className="hidden md:flex items-center gap-2 sm:gap-3">
-            <Link href="/student_profile" className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white shadow-md text-xs sm:text-sm font-bold">
-                {studentInitial}
-              </div>
-              <span className="hidden sm:inline font-semibold">Profile</span>
-            </Link>
-            <button onClick={handleLogout} className="px-3 sm:px-4 py-1.5 sm:py-2 bg-transparent border border-slate-200 text-slate-600 text-xs sm:text-sm font-semibold rounded-xl hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all duration-200">Log out</button>
-          </div>
+         <div className="hidden md:flex items-center gap-2 sm:gap-3">
+  <NotificationBell />
+  <Link href="/student_profile" className="flex items-center gap-2 text-xs sm:text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors">
+    <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white shadow-md text-xs sm:text-sm font-bold">
+      {studentInitial}
+    </div>
+    <span className="hidden sm:inline font-semibold">Profile</span>
+  </Link>
+  <button onClick={handleLogout} className="px-3 sm:px-4 py-1.5 sm:py-2 bg-transparent border border-slate-200 text-slate-600 text-xs sm:text-sm font-semibold rounded-xl hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all duration-200">Log out</button>
+</div>
 
           <div className="flex md:hidden items-center gap-2">
-            <Link href="/student_profile" className="flex items-center justify-center w-9 h-9 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-full text-white shadow-md text-sm font-bold hover:shadow-lg transition-shadow">
-              {studentInitial}
-            </Link>
-            <button onClick={(e: any) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors mobile-menu-container">
-              <svg className={`w-6 h-6 ${isMobileMenuOpen ? 'rotate-90' : ''} transition-transform`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
-          </div>
+  <NotificationBell />
+  <Link href="/student_profile" className="flex items-center justify-center w-9 h-9 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-full text-white shadow-md text-sm font-bold hover:shadow-lg transition-shadow">
+    {studentInitial}
+  </Link>
+  <button onClick={(e: any) => { e.stopPropagation(); setIsMobileMenuOpen(!isMobileMenuOpen); }} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors mobile-menu-container">
+    <svg className={`w-6 h-6 ${isMobileMenuOpen ? 'rotate-90' : ''} transition-transform`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+</div>
         </div>
 
         {isMobileMenuOpen && (
@@ -927,6 +1160,7 @@ export default function StudentMainPage() {
             <div className="px-4 py-3 sm:py-4 space-y-1 sm:space-y-2 max-h-[70vh] overflow-y-auto">
               <Link href="/student_main" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-blue-600 bg-blue-50 rounded-xl">📋 Find OJT</Link>
               <Link href="/map" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">🗺️ Map View</Link>
+              <Link href="/student_applications" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">📋 My Applications</Link>
               <Link href="/studentai" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">🤖 AI Assistant</Link>
               <hr className="border-slate-100 my-2 sm:my-3" />
               <Link href="/student_profile" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">
@@ -978,6 +1212,21 @@ export default function StudentMainPage() {
                 <strong className="text-white text-sm sm:text-base">{filteredPosts.length}</strong>
                 <span className="hidden xs:inline">positions available</span>
               </span>
+
+              {/* 🔖 Saved filter toggle */}
+              <button
+                onClick={() => setShowSavedOnly(!showSavedOnly)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border transition-all text-xs font-semibold ${
+                  showSavedOnly
+                    ? 'bg-amber-400 text-slate-900 border-amber-300'
+                    : 'bg-white/10 text-amber-200 border-amber-300/30 hover:bg-white/20'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill={showSavedOnly ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                {showSavedOnly ? `Saved (${savedPostIds.size})` : `Saved (${savedPostIds.size})`}
+              </button>
               
               {hasActiveOJT && (
                 <span className="flex items-center gap-1.5 px-3 py-1 bg-yellow-400/20 text-yellow-200 rounded-full border border-yellow-300/50">
@@ -1035,10 +1284,26 @@ export default function StudentMainPage() {
                           
                           {/* ✅ FIXED BADGE CONTAINER: Stacks nicely on mobile, aligns right */}
                           <div className="flex flex-col items-end gap-1 sm:gap-1.5">
+                            {/* 🔖 Bookmark toggle on card */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleSavePost(post.id); }}
+                              className={`p-1 rounded-md transition-colors ${savedPostIds.has(post.id) ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}
+                              title={savedPostIds.has(post.id) ? 'Unsave' : 'Save'}
+                            >
+                              <svg className="w-4 h-4" fill={savedPostIds.has(post.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                              </svg>
+                            </button>
                             <span className={`inline-flex items-center gap-1 text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full font-semibold ${post.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                               <span className={`w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full ${post.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                               <span className="hidden xs:inline">Active</span>
                             </span>
+                            {/* ✅ NEW: Show "Full" badge when vacancies = 0 */}
+                            {(post.vacancies ?? 0) <= 0 && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold bg-red-100 text-red-600 border border-red-200">
+                                🔒 Full
+                              </span>
+                            )}
 
                             {/* ✅ DUAL BADGE SYSTEM */}
                             <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
@@ -1072,7 +1337,7 @@ export default function StudentMainPage() {
                         <h4 className={`text-sm sm:text-base font-bold mb-0.5 sm:mb-1 line-clamp-1 transition-colors ${isSelected ? 'text-blue-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{post.title}</h4>
                         <p className="text-xs sm:text-sm text-slate-500 mb-2 sm:mb-3 truncate">{post.companies?.company_name || 'Company'}</p>
                         <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-slate-400 mb-2 sm:mb-3 flex-wrap">
-                          <span className="inline-flex items-center gap-1"><MapPinIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" /><span className="truncate max-w-[70px] sm:max-w-[100px]">{post.location_name.split(',')[0]}</span></span>
+                          <span className="inline-flex items-center gap-1"><MapPinIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" /><span className="truncate max-w-[70px] sm:max-w-[100px]">{(post.location_name || 'Unknown').split(',')[0]}</span></span>
                           <span className="text-slate-300 hidden xs:inline">|</span>
                           <span className="inline-flex items-center gap-1 hidden xs:flex"><ClockIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />{post.duration_hours}h</span>
                           <span className="ml-auto inline-flex items-center gap-1">{getWorkTypeIcon(post.work_type)}<span className="hidden sm:inline">{getWorkTypeLabel(post.work_type)}</span></span>
@@ -1306,6 +1571,16 @@ export default function StudentMainPage() {
                         );
                       }
                       
+                      // ✅ NEW: No slots available — disable Apply button
+                      if ((selectedPost.vacancies ?? 0) <= 0) {
+                        return (
+                          <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-red-50 text-red-600 border-2 border-red-200 font-bold rounded-lg sm:rounded-xl cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
+                            <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                            No Slots Available
+                          </button>
+                        );
+                      }
+                      
                       // 7. Submitting application
                       return applyingPostId === selectedPost.id ? (
                         <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-blue-400 text-white font-semibold rounded-lg sm:rounded-xl cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
@@ -1319,8 +1594,18 @@ export default function StudentMainPage() {
                       );
                     })()}
                     
-                    <button className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-white text-slate-600 font-semibold rounded-lg sm:rounded-xl border-2 border-slate-200 hover:border-blue-200 hover:text-blue-600 hover:bg-blue-50/30 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm">
-                      <BookmarkIcon className="w-4 h-4 sm:w-5 sm:h-5" /> Save Position
+                    <button
+                      onClick={() => selectedPost && toggleSavePost(selectedPost.id)}
+                      className={`w-full sm:flex-1 py-2.5 sm:py-3.5 font-semibold rounded-lg sm:rounded-xl border-2 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm ${
+                        selectedPost && savedPostIds.has(selectedPost.id)
+                          ? 'bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-amber-200 hover:text-amber-600 hover:bg-amber-50/30'
+                      }`}
+                    >
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5" fill={selectedPost && savedPostIds.has(selectedPost.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                      </svg>
+                      {selectedPost && savedPostIds.has(selectedPost.id) ? 'Saved' : 'Save Position'}
                     </button>
                   </div>
                 </div>
@@ -1365,6 +1650,68 @@ export default function StudentMainPage() {
         @keyframes slide-in { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
+
+      {/* 💬 Floating Chat Bubble — enabled when accepted */}
+      {currentUserId && (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-1">
+          {(() => {
+            const canChat = hasActiveOJT && activeOJTCompany && companyUserId;
+            const reason = !canChat
+              ? !hasActiveOJT ? 'Not accepted yet'
+              : !companyUserId ? 'Loading...'
+              : 'Unavailable'
+              : '';
+            return (
+              <>
+                <button
+                  onClick={() => canChat && setShowChat(true)}
+                  disabled={!canChat}
+                  className={`w-14 h-14 rounded-full shadow-lg transition-all flex items-center justify-center relative ${
+                    canChat
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={canChat ? `Message ${activeOJTCompany}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}` : reason}
+                >
+                  <svg className="w-7 h-7 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  {!canChat && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
+                      </svg>
+                    </span>
+                  )}
+                  {/* 🔴 Red badge + 🔵 blue pulsing ring when there are unread messages */}
+                  {canChat && chatUnread > 0 && (
+                    <>
+                      <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md z-10">
+                        {chatUnread > 9 ? '9+' : chatUnread}
+                      </span>
+                    </>
+                  )}
+                </button>
+                {!canChat && (
+                  <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">{reason}</span>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* 💬 Chat Modal */}
+      {showChat && currentUserId && companyUserId && (
+        <ChatPanel
+          myUserId={currentUserId}
+          otherUserId={companyUserId}
+          myName={studentName || user?.email || 'Student'}
+          otherName={activeOJTCompany}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }

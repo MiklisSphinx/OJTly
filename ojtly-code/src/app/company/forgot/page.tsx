@@ -3,7 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase'; // ✅ 1. Add this import at the top
+import { createBrowserClient } from '@supabase/ssr';
+
+// Create the same client as the login page
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');

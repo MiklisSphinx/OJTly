@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { createBrowserClient } from '@supabase/ssr'; // ✅ FIX 1: Changed from supabase-js
+import { createBrowserClient } from '@supabase/ssr';
 
 export default function StudentLoginPage() {
-  // ✅ FIX 2: Use createBrowserClient so cookies save for the WHOLE site (path=/)
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -16,10 +15,39 @@ export default function StudentLoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  // ✅ NEW: email verification state
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+  // ✅ NEW: Resend verification email
+  const handleResendVerification = async () => {
+    if (!email) {
+      setErrorMessage('Please enter your email first.');
+      return;
+    }
+    setResendStatus('sending');
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
+      if (error) {
+        setErrorMessage('Failed to resend: ' + error.message);
+        setResendStatus('idle');
+      } else {
+        setResendStatus('sent');
+        setTimeout(() => setResendStatus('idle'), 5000);
+      }
+    } catch (err) {
+      setErrorMessage('Failed to resend verification email');
+      setResendStatus('idle');
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setNeedsVerification(false);
     setIsLoading(true);
 
     try {
@@ -35,6 +63,13 @@ export default function StudentLoginPage() {
       });
 
       if (authError) {
+        // ✅ NEW: Check if the error is "email not confirmed"
+        const errMsg = (authError.message || '').toLowerCase();
+        if (errMsg.includes('email not confirmed') || errMsg.includes('not confirmed')) {
+          setNeedsVerification(true);
+          setIsLoading(false);
+          return;
+        }
         setErrorMessage('Invalid email or password.');
         setIsLoading(false);
         return;
@@ -60,9 +95,9 @@ export default function StudentLoginPage() {
         return;
       }
 
-                // ✅ Set a 10-second bypass cookie with the User ID
+      // ✅ Set a 10-second bypass cookie with the User ID
       document.cookie = `ojtly_just_logged_in=${authData.user.id}; path=/; max-age=10`;
-      
+
       // ✅ Then redirect
       window.location.href = '/student_main';
       return;
@@ -77,10 +112,10 @@ export default function StudentLoginPage() {
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
-      
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { 
+        options: {
           redirectTo: `${window.location.origin}/auth/callback`
         },
       });
@@ -98,7 +133,7 @@ export default function StudentLoginPage() {
 
   return (
     <div className="min-h-screen flex font-sans overflow-x-hidden bg-[#F8FAFC]">
-      
+
       {/* LEFT SIDE */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-indigo-900 relative overflow-hidden justify-center items-center">
         <div className="absolute top-10 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
@@ -118,14 +153,14 @@ export default function StudentLoginPage() {
 
       {/* RIGHT SIDE */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-[#F8FAFC] p-6 relative">
-        
+
         <Link href="/" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-blue-600 transition-colors font-medium text-sm group z-20">
           <svg className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
           Back
         </Link>
 
         <div className="w-full max-w-md space-y-8 mt-12 lg:mt-0">
-          
+
           <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-900">Student Sign In</h2>
             <p className="text-gray-500 mt-2">Access your student dashboard</p>
@@ -140,8 +175,45 @@ export default function StudentLoginPage() {
           </div>
 
           <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100">
-            
-            {errorMessage && (
+
+            {/* ✅ NEW: Email verification pending message */}
+            {needsVerification && (
+              <div className="mb-4 p-5 bg-blue-50 border border-blue-200 rounded-xl">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-blue-800">Verify Your Email</p>
+                    <p className="text-xs text-blue-600 mt-1 leading-relaxed">
+                      We sent a verification link to <strong>{email}</strong>.
+                      Click the link in your email to activate your account, then try signing in again.
+                    </p>
+                    <p className="text-[10px] text-amber-600 mt-1">⚠ Don't forget to check your spam folder.</p>
+                  </div>
+                  <button onClick={() => { setNeedsVerification(false); setErrorMessage(''); }} className="text-blue-400 hover:text-blue-600 shrink-0">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                {/* Resend button */}
+                <button
+                  onClick={handleResendVerification}
+                  disabled={resendStatus === 'sending'}
+                  className={`w-full py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                    resendStatus === 'sent'
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                      : 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  {resendStatus === 'sending' ? 'Sending...' : resendStatus === 'sent' ? '✅ Verification email sent!' : '🔄 Resend verification email'}
+                </button>
+              </div>
+            )}
+
+            {/* Regular error message */}
+            {errorMessage && !needsVerification && (
               <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
                 <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -157,21 +229,21 @@ export default function StudentLoginPage() {
             )}
 
             <form onSubmit={handleLogin} className="space-y-5">
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </span>
-                  <input 
-                    type="email" 
-                    placeholder='you@example.com' 
+                  <input
+                    type="email"
+                    placeholder='you@example.com'
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
                     className={`w-full pl-12 pr-4 py-3.5 bg-gray-50 border rounded-xl focus:ring-2 outline-none transition ${errorMessage && !email ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500 focus:border-transparent'}`}
-                    required 
+                    required
                   />
                 </div>
               </div>
@@ -182,18 +254,18 @@ export default function StudentLoginPage() {
                   <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                   </span>
-                  <input 
-                    type={showPassword ? "text" : "password"} 
+                  <input
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder='•••••••'
                     disabled={isLoading}
                     className={`w-full pl-12 pr-12 py-3.5 bg-gray-50 border rounded-xl focus:ring-2 outline-none transition ${errorMessage && !password ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-blue-500 focus:border-transparent'}`}
-                    required 
+                    required
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowPassword(!showPassword)} 
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
                     className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600"
                   >
                     {showPassword ? (
@@ -213,8 +285,8 @@ export default function StudentLoginPage() {
                  <Link href="/student/forgotpassword" className="text-blue-600 hover:underline font-semibold">Forgot?</Link>
                </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isLoading}
                 className={`w-full py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
@@ -241,7 +313,7 @@ export default function StudentLoginPage() {
                 <div className="relative flex justify-center text-sm"><span className="px-4 bg-white text-gray-500">Or continue with</span></div>
               </div>
 
-              <button 
+              <button
                 onClick={handleGoogleLogin}
                 disabled={isLoading}
                 className={`w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition group ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}

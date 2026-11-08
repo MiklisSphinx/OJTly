@@ -9,7 +9,7 @@ export default function CompanyLogin() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -26,25 +26,25 @@ export default function CompanyLogin() {
       // 🧹 CLEAN SLATE - Clear old sessions
       // ==========================================
       console.log('🧹 Clearing old sessions...');
-      
-    // Clean old sessions
-await supabase.auth.signOut({ scope: 'global' });
 
-if (typeof window !== 'undefined') {
-  // Clear localStorage
-  const keysToRemove = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && (key.includes('sb-') || key.includes('supabase'))) {
-      keysToRemove.push(key);
-    }
-  }
-  keysToRemove.forEach(key => localStorage.removeItem(key));
-        
+      // Clean old sessions
+      await supabase.auth.signOut({ scope: 'global' });
+
+      if (typeof window !== 'undefined') {
+        // Clear localStorage
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('sb-') || key.includes('supabase'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+
         // Clear old cookies
         document.cookie = 'ojtly-auth-token=; path=/; max-age=0; SameSite=Lax';
         document.cookie = 'ojtly_just_logged_in=; path=/; max-age=0; SameSite=Lax';
-        
+
         console.log('🗑️ Old data cleared');
       }
 
@@ -62,7 +62,14 @@ if (typeof window !== 'undefined') {
         password,
       });
 
-      if (authError) {
+          if (authError) {
+        // ✅ Check if email is not confirmed
+        const errMsg = (authError.message || '').toLowerCase();
+        if (errMsg.includes('email not confirmed') || errMsg.includes('not confirmed')) {
+          setErrorMessage('📧 Please verify your email before signing in. Check your inbox (and spam folder) for the verification link.');
+          setIsLoading(false);
+          return;
+        }
         setErrorMessage('Invalid email or password.');
         setIsLoading(false);
         return;
@@ -122,9 +129,13 @@ if (typeof window !== 'undefined') {
       // ==========================================
       // STEP 3: CHECK COMPANY APPROVAL STATUS
       // ==========================================
+      // ✅ FIX: also fetch is_approved so we can use it as a fallback. The
+      // old check only allowed status='approved'/'Approved' — but the
+      // admin dashboard's Activate button sets status='Active', which
+      // blocked the company from logging in even though is_approved=true.
       const { data: company, error: companyError } = await supabase
         .from('companies')
-        .select('status')
+        .select('status, is_approved')
         .eq('user_id', authData.user.id)
         .single();
 
@@ -136,28 +147,54 @@ if (typeof window !== 'undefined') {
         return;
       }
 
-      if (company.status === 'pending') {
+      // ✅ Normalize status to lowercase ONCE so all comparisons are
+      // case-insensitive. This handles 'pending', 'Pending', 'PENDING',
+      // 'approved', 'Approved', 'Active', 'ACTIVE', etc. uniformly.
+      const statusLower = (company.status || '').toLowerCase();
+      const isApproved = company.is_approved === true;
+
+      console.log(`🏢 Company status: "${company.status}" → "${statusLower}" | is_approved: ${isApproved}`);
+
+      // ==========================================
+      // BLOCKED STATUSES (case-insensitive)
+      // ==========================================
+      if (statusLower === 'pending') {
         await supabase.auth.signOut({ scope: 'global' });
         setErrorMessage('⏳ Account Pending Approval\n\nYour company registration is still under review.\nPlease wait for an administrator to verify your documents.');
         setIsLoading(false);
         return;
       }
 
-      if (company.status === 'rejected') {
+      if (statusLower === 'rejected') {
         await supabase.auth.signOut({ scope: 'global' });
         setErrorMessage('❌ Application Rejected\n\nYour company application was not approved.\nPlease contact the administrator for more information.');
         setIsLoading(false);
         return;
       }
 
-      if (company.status === 'archived' || company.status === 'suspended') {
+      if (statusLower === 'archived' || statusLower === 'suspended' || statusLower === 'deleted') {
         await supabase.auth.signOut({ scope: 'global' });
         setErrorMessage(`🚫 Account ${company.status?.toUpperCase()}\n\nYour company account has been ${company.status}.\nPlease contact support.`);
         setIsLoading(false);
         return;
       }
 
-      if (company.status !== 'approved' && company.status !== 'Approved') {
+      // ==========================================
+      // ✅ ALLOWED STATUSES (case-insensitive)
+      //
+      // The admin workflow moves a company through these states:
+      //   Pending → approved (via /admin_approval)
+      //   approved → Accepted → Active (via /admin_main dashboard)
+      //
+      // Any of these means the company is cleared to log in. We also
+      // accept is_approved=true as a fallback so a company that was
+      // approved through /admin_approval (which sets is_approved=true)
+      // can log in regardless of the exact status string.
+      // ==========================================
+      const ALLOWED_STATUSES = ['approved', 'accepted', 'active', 'ongoing', 'looking'];
+      const statusAllowed = ALLOWED_STATUSES.includes(statusLower);
+
+      if (!statusAllowed && !isApproved) {
         await supabase.auth.signOut({ scope: 'global' });
         setErrorMessage(`⚠️ Account Status: ${company.status}\n\nYour account is not active. Please contact support.`);
         setIsLoading(false);
@@ -168,13 +205,13 @@ if (typeof window !== 'undefined') {
       // ✅ SUCCESS! Ensure session is ready
       // ==========================================
       console.log('✅ All checks passed - preparing redirect');
-      
+
       // Force session refresh to ensure middleware can read it
       await supabase.auth.getSession();
-      
+
       // Small delay to ensure cookies are set
       await new Promise(resolve => setTimeout(resolve, 300));
-      
+
       // Hard redirect to dashboard
       window.location.href = '/company_main';
 
@@ -189,7 +226,7 @@ if (typeof window !== 'undefined') {
 
   return (
     <div className="min-h-screen flex font-sans">
-      
+
       {/* LEFT SIDE - Visual */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-teal-500 to-emerald-700 relative overflow-hidden justify-center items-center">
         <div className="absolute top-10 left-10 w-72 h-72 bg-teal-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
@@ -199,7 +236,7 @@ if (typeof window !== 'undefined') {
         <div className="relative z-10 text-center text-white p-8">
           <h1 className="text-4xl font-bold mb-4">Company Portal</h1>
           <p className="text-lg text-teal-100">Manage your listings and find talent.</p>
-          
+
           <div className="mt-8 inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
             <div className="w-2 h-2 bg-emerald-300 rounded-full animate-pulse"></div>
             <span className="text-sm font-medium text-teal-50">Secure Authentication</span>
@@ -209,14 +246,14 @@ if (typeof window !== 'undefined') {
 
       {/* RIGHT SIDE - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-slate-50 p-6 relative">
-        
+
         <Link href="/" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-teal-600 transition-colors font-medium text-sm group z-20">
             <svg className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
             Back
         </Link>
 
         <div className="w-full max-w-md space-y-8 mt-12 lg:mt-0">
-          
+
           <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-900">Company Sign In</h2>
             <p className="text-gray-500 mt-2">Access your Company Dashboard</p>
@@ -232,7 +269,7 @@ if (typeof window !== 'undefined') {
           </div>
 
           <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100">
-            
+
             {errorMessage && (
               <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
                 <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,14 +292,14 @@ if (typeof window !== 'undefined') {
                   <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </span>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     placeholder="company@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
                     className={`w-full pl-12 pr-4 py-3.5 bg-gray-50 border rounded-xl focus:ring-2 outline-none transition ${errorMessage ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-teal-500 focus:border-transparent'}`}
-                    required 
+                    required
                   />
                 </div>
               </div>
@@ -273,18 +310,18 @@ if (typeof window !== 'undefined') {
                   <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002 2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                   </span>
-                  <input 
-                    type={showPassword ? "text" : "password"} 
+                  <input
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder='Enter your password'
                     disabled={isLoading}
                     className={`w-full pl-12 pr-12 py-3.5 bg-gray-50 border rounded-xl focus:ring-2 outline-none transition ${errorMessage ? 'border-red-300 focus:ring-red-500' : 'border-gray-200 focus:ring-teal-500 focus:border-transparent'}`}
-                    required 
+                    required
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowPassword(!showPassword)} 
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
                     className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-teal-600"
                   >
                     {showPassword ? (
@@ -304,9 +341,9 @@ if (typeof window !== 'undefined') {
                  <a href="/company/forgot" className="text-teal-600 hover:underline font-medium">Forgot Password?</a>
               </div>
 
-              <button 
-                type="submit" 
-                disabled={isLoading} 
+              <button
+                type="submit"
+                disabled={isLoading}
                 className={`w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 {isLoading ? (
@@ -323,7 +360,7 @@ if (typeof window !== 'undefined') {
                   </>
                 )}
               </button>
-              
+
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
                 <div className="relative flex justify-center text-sm"><span className="px-4 bg-white text-gray-500">Or continue with</span></div>
@@ -339,7 +376,7 @@ if (typeof window !== 'undefined') {
                   </svg>
                   <span className="text-gray-500 font-medium">Google</span>
                 </button>
-                
+
                 <div className="absolute -top-3 right-4 bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-200 shadow-sm">
                   Coming Soon
                 </div>

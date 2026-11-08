@@ -1,9 +1,11 @@
 
 "use client";
-
+export const dynamic = 'force-dynamic';
 import { useState, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import NotificationBell from "@/components/NotificationBell";
+
 
 type Message = { id: number; text: string; sender: "user" | "ai"; timestamp?: Date };
 
@@ -165,8 +167,36 @@ function parseCards(text: string): { cards: Card[]; title: string; footer: strin
       if (de) { const dv = de[1].replace(/\*\*/g,"").trim(); if(!isGarbage(dv)&&dv.length>5) cur.description = dv; }
       const vac = t.match(/(?:vacanc(?:y|ies)|slots?|openings?|positions?)\s*[:\-–—|]?\s*(\d+)/i);
       if (vac) cur.vacancies = vac[1];
-      const dist = t.match(/(?:distance|dist\.?)\s*[:\-–—|]?\s*([\d.]+)\s*km\b/i);
-      if (dist) cur.distance = `${dist[1]} km`; else if (!cur.distance) { const d2 = t.match(/([\d.]+)\s*km\b/i); if(d2) cur.distance = `${d2[1]} km`; }
+   // Distance: accepts km, kms, kilometer(s), or bare number after "distance:"
+const dist = t.match(/(?:distance|dist\.?|away|from)\s*[:\-–—|]?\s*([\d.]+)\s*(?:km|kms|kilometers?|k)\b/i);
+if (dist) {
+  const km = parseFloat(dist[1]);
+  cur.distance = `${isNaN(km) ? dist[1] : km.toFixed(1)} km`;
+} else if (!cur.distance) {
+  const d2 = t.match(/([\d.]+)\s*(?:km|kms|kilometers?|k)\b/i);
+  if (d2) {
+    const km = parseFloat(d2[1]);
+    cur.distance = `${isNaN(km) ? d2[1] : km.toFixed(1)} km`;
+  } else if (/\bdistance\b/i.test(t)) {
+    // "Distance: 5.2" with no unit — assume km
+    const d3 = t.match(/([\d.]+)/);
+    if (d3) {
+      const km = parseFloat(d3[1]);
+      cur.distance = `${isNaN(km) ? d3[1] : km.toFixed(1)} km`;
+    }
+  }
+}
+// Fallback: if a card has no distance but mentions km/kilometers in any extra line, grab it
+if (cur && !cur.distance && cur.extra.length > 0) {
+  for (const line of cur.extra) {
+    const m = line.match(/([\d.]+)\s*(?:km|kms|kilometers?|k)\b/i);
+    if (m) {
+      const km = parseFloat(m[1]);
+      cur.distance = `${isNaN(km) ? m[1] : km.toFixed(1)} km`;
+      break;
+    }
+  }
+}
       const cc = t.match(/(?:course\s*(?:category|type|track)|program)\s*[:\-–—|]?\s*(.+)/i);
       if (cc) { const cv = cc[1].replace(/\*\*/g,"").trim(); if(!isGarbage(cv)&&cv.length>1) cur.courseCategory = cv; }
       if (!skip.some(p => p.test(t)) && !t.match(/^\d+[\.\)]/)) cur.extra.push(t.replace(/\*\*/g,""));
@@ -343,9 +373,13 @@ export default function StudentAI() {
     setIsTyping(true); 
     setError(null);
     
-    const hist = (skipAdd ? messages : [...messages, { text: query, sender: "user" as const }])
-      .filter(m => m.sender === "user")
-      .map(m => ({ role: "user" as const, content: m.text }));
+const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, sender: "user", timestamp: new Date() }])
+  .filter(m => m.text && m.text.trim().length > 0)
+  .map(m => ({
+    role: m.sender === "user" ? "user" as const : "assistant" as const,
+    content: m.text
+  }))
+  .slice(-4);   // keep only the last 4 messages — prevents Groq from getting "conversational"
       
     try {
       // ✅ FIX 1: Increased to 2500ms (2.5 sec) minimum so skeleton feels natural
@@ -366,6 +400,13 @@ export default function StudentAI() {
       // (This helps you debug if backend is sending wrong format)
       if (!d.text.includes('**')) {
         console.warn('[AI] Response did not contain proper card formatting. Check route.ts system prompt.');
+      }
+      
+           // ✅ Filter out empty/whitespace-only responses before adding
+      const aiText = typeof d.text === "string" ? d.text.trim() : "";
+      if (!aiText) {
+        setError("AI returned an empty response. Please try again.");
+        return;
       }
       
       setMessages(p => [...p, { id: Date.now() + 1, text: d.text, sender: "ai", timestamp: new Date() }]);
@@ -392,15 +433,15 @@ export default function StudentAI() {
   if (mode === "menu") {
     return (
       <div className="fixed inset-0 flex flex-col bg-[#f8fafc] font-['Inter',system-ui,sans-serif]">
-        <header className="flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-50">
-          <div className="max-w-md mx-auto px-4 h-12 flex items-center justify-between">
-            <Link href="/student_main" className="p-1.5 -ml-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </Link>
-            <OJTlyLogo size="sm" />
-            <div className="w-7" />
-          </div>
-        </header>
+ <header className="flex-shrink-0 bg-white border-b border-slate-100 z-50">
+  <div className="max-w-md mx-auto px-4 h-12 flex items-center justify-between gap-2">
+    <Link href="/student_main" className="p-1.5 -ml-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors shrink-0">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+    </Link>
+    <OJTlyLogo size="sm" />
+    <NotificationBell />
+  </div>
+</header>
 
         <main className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center px-4 py-6">
           <div className="w-full max-w-xs flex flex-col items-center space-y-7">
@@ -425,9 +466,13 @@ export default function StudentAI() {
 
             <div className="grid grid-cols-2 gap-3 w-full">
               {BUTTONS.map((b, i) => (
-                <motion.button key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 + i * 0.05 }}
-                  onClick={() => send(b.query, b.location)}
-                  className={`group bg-white p-4 rounded-xl border ${b.border} text-center shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97]`}>
+              <motion.button key={i}
+  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+  transition={{ delay: 0.18 + i * 0.05 }}
+  onClick={() => send(b.query, b.location)}
+  disabled={isTyping || refreshing}
+  className={`group bg-white px-3 py-3 rounded-xl border ${b.border} shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.95] flex flex-col items-center gap-2 ${isTyping || refreshing ? 'opacity-50 pointer-events-none' : ''}`}
+>
                   <div className={`w-10 h-10 rounded-xl ${b.bgAccent} flex items-center justify-center mx-auto mb-2 transition-transform group-hover:scale-110`}>
                     <MenuIcon type={b.icon} className={`w-5 h-5 ${b.accent}`} />
                   </div>
@@ -446,29 +491,30 @@ export default function StudentAI() {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#f8fafc] font-['Inter',system-ui,sans-serif]">
-      <header className="flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-50">
-        <div className="max-w-md mx-auto px-3 h-12 flex items-center justify-between">
-          <button onClick={() => setMode("menu")} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <OJTlyLogo size="sm" />
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded-full px-1.5 py-0.5">
-              <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" /></span>
-              <span className="text-[8px] font-bold text-emerald-700">Online</span>
-            </div>
-            <button onClick={handleRefresh} disabled={refreshing || isTyping || messages.length < 2}
-              className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-25 disabled:pointer-events-none" title="Refresh">
-              <span className={refreshing ? "animate-spin inline-block" : "inline-block"}>{IcRefresh}</span>
-            </button>
-          </div>
-        </div>
-      </header>
+  <header className="flex-shrink-0 bg-white border-b border-slate-100 z-50">
+  <div className="max-w-md mx-auto px-3 h-12 flex items-center justify-between gap-2">
+    <button onClick={() => setMode("menu")} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors shrink-0">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+    </button>
+    <OJTlyLogo size="sm" />
+    <div className="flex items-center gap-1.5 shrink-0">
+      <NotificationBell />
+      <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded-full px-1.5 py-0.5">
+        <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" /></span>
+        <span className="text-[8px] font-bold text-emerald-700">Online</span>
+      </div>
+      <button onClick={handleRefresh} disabled={refreshing || isTyping || messages.length < 2}
+        className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-25 disabled:pointer-events-none" title="Refresh">
+        <span className={refreshing ? "animate-spin inline-block" : "inline-block"}>{IcRefresh}</span>
+      </button>
+    </div>
+  </div>
+</header>
 
       <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         <div className="max-w-md mx-auto px-4 py-5 flex flex-col items-center space-y-4">
-          <AnimatePresence mode="popLayout">
-            {messages.map(msg => (
+                   <AnimatePresence mode="popLayout">
+            {messages.filter(msg => msg.text && msg.text.trim().length > 0).map(msg => (
               <motion.div key={msg.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 className={`flex w-full ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.sender === "ai" && (

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import AdminNotificationBell from '@/components/AdminNotificationBell';
+import FloatingChatButton from '@/components/FloatingChatButton';
 
 type Toast = { id: number; message: string; type: 'success' | 'error' | 'info'; };
 type Student = { id: string; full_name: string; email: string; course: string | null; ojt_status?: string; };
@@ -37,10 +39,10 @@ export default function AdminDashboard() {
     }).length;
   }, [students]);
 
-  const totalAcceptedCompanies = useMemo(() => {
+   const totalAcceptedCompanies = useMemo(() => {
     return companies.filter(c => {
       const st = (c.status || '').toLowerCase();
-      return st === 'accepted' || st === 'active' || st === 'ongoing';
+      return st === 'accepted' || st === 'active' || st === 'ongoing' || st === 'approved';
     }).length;
   }, [companies]);
 
@@ -199,15 +201,77 @@ export default function AdminDashboard() {
     }
   };
 
+  // ==========================================
+  // ✅ FIXED handleCompanyAction:
+  //   1. Also sets is_approved=true for accept/activate so the company can
+  //      log in even if they were never approved through /admin_approval.
+  //   2. Uses capitalized status values consistently ('Accepted', 'Active',
+  //      'Ongoing', 'Looking') to match what the rest of the system expects.
+  //   3. Sends a welcome notification to the company when first activated.
+  // ==========================================
   const handleCompanyAction = async (companyId: string, companyName: string, action: 'accept' | 'activate' | 'ongoing' | 'looking') => {
     try {
       const supabase = createClient();
-      const statusMap: Record<string, string> = { accept: 'Accepted', activate: 'Active', ongoing: 'Ongoing', looking: 'Looking' };
-      const { error } = await supabase.from('companies').update({ status: statusMap[action] }).eq('id', companyId);
+      const statusMap: Record<string, string> = {
+        accept: 'Accepted',
+        activate: 'Active',
+        ongoing: 'Ongoing',
+        looking: 'Looking'
+      };
+
+      // Build the update payload. For 'accept' and 'activate', also flip
+      // is_approved=true so the company login flow lets them in.
+      const updatePayload: Record<string, any> = { status: statusMap[action] };
+      if (action === 'accept' || action === 'activate') {
+        updatePayload.is_approved = true;
+      }
+
+      const { error } = await supabase
+        .from('companies')
+        .update(updatePayload)
+        .eq('id', companyId);
       if (error) throw error;
-      setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, status: statusMap[action] } : c));
+
+      // Update local state immediately so the UI reflects the change
+      setCompanies(prev => prev.map(c =>
+        c.id === companyId
+          ? { ...c, status: statusMap[action] }
+          : c
+      ));
+
+      // ✅ On Activate, send the company a welcome notification + try to
+      // mark their auth user as confirmed (no-op if column doesn't exist).
+      if (action === 'activate') {
+        try {
+          // Look up the company's user_id so we can notify them
+          const { data: companyRow } = await supabase
+            .from('companies')
+            .select('user_id')
+            .eq('id', companyId)
+            .maybeSingle();
+
+          if (companyRow?.user_id) {
+            await supabase.from('notifications').insert({
+              user_id: companyRow.user_id,
+              title: 'Account Activated ⚡',
+              message: `Your company account "${companyName}" is now active! You can log in and start posting OJT opportunities.`,
+              type: 'company_status',
+              is_read: false,
+              link_url: '/company_main',
+              created_at: new Date().toISOString()
+            });
+          }
+        } catch (notifErr) {
+          console.warn('⚠️ Notification insert failed (non-fatal):', notifErr);
+        }
+      }
+
       addToast(`${companyName} set to ${statusMap[action]}`, 'success');
-    } catch (err) { addToast(`Failed to update company`, 'error'); }
+    } catch (err: any) {
+      const msg = err?.message || `Failed to update company`;
+      console.error('❌ handleCompanyAction error:', msg, err);
+      addToast(msg, 'error');
+    }
   };
 
   const getStatusStyle = (status: string | undefined | null): string => {
@@ -321,7 +385,10 @@ export default function AdminDashboard() {
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors -ml-1"><svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg></button>
               <div><h1 className="text-sm sm:text-base font-bold text-slate-800">Dashboard</h1><p className="text-[10px] sm:text-[11px] text-slate-400 -mt-0.5 hidden sm:block">Manage students and companies</p></div>
             </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20">A</div>
+            <div className="flex items-center gap-2">
+              <AdminNotificationBell />
+              <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20">A</div>
+            </div>
           </div>
         </header>
 
@@ -482,7 +549,16 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
                       </tr></thead>
                       <tbody className="divide-y divide-slate-50">
-                        {filteredCompanies.map((c) => (
+                        {filteredCompanies.map((c) => {
+                          // ✅ Case-insensitive status check — handles both 'approved'
+                          // (from admin_approval page) and 'Approved' / 'Accepted'
+                          // (from this dashboard). Without this, the Activate
+                          // button would never appear for companies approved
+                          // through /admin_approval.
+                          const st = (c.status || '').toLowerCase();
+                          const isAcceptedOrApproved = st === 'accepted' || st === 'approved';
+                          const isActiveOrOngoing = st === 'active' || st === 'ongoing';
+                          return (
                           <tr key={c.id}>
                             <td className="px-4 py-3"><div className="flex items-center gap-3"><div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold text-xs shrink-0">{(c.company_name || 'C').charAt(0).toUpperCase()}</div><div><p className="font-semibold text-xs sm:text-sm text-slate-800">{c.company_name}</p><p className="text-[10px] text-slate-400 truncate max-w-[180px]">{c.email || ''}</p></div></div></td>
                             <td className="px-4 py-3"><span className="text-xs text-slate-600 font-medium">{c.industry || 'General'}</span></td>
@@ -490,14 +566,15 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyle(c.status)}`}>{c.status || 'Looking'}</span></td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                {c.status !== 'Accepted' && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'accept')} className="bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">Accept</button>)}
-                                {c.status === 'Accepted' && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'activate')} className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">Activate</button>)}
-                                {(c.status === 'Active' || c.status === 'Ongoing') && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, c.status === 'Active' ? 'ongoing' : 'looking')} className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">{c.status === 'Active' ? 'Ongoing' : 'Looking'}</button>)}
+                                {!isAcceptedOrApproved && !isActiveOrOngoing && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'accept')} className="bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">Accept</button>)}
+                                {isAcceptedOrApproved && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'activate')} className="bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">Activate</button>)}
+                                {isActiveOrOngoing && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, st === 'active' ? 'ongoing' : 'looking')} className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">{st === 'active' ? 'Ongoing' : 'Looking'}</button>)}
                                 <button type="button" onClick={(e) => { e.stopPropagation(); showConfirm('Remove Company', `Remove "${c.company_name}"? They will no longer appear in the directory.`, () => handleDeleteCompany(c.id, c.company_name)); }} className="bg-red-500 hover:bg-red-600 active:bg-red-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold transition-colors">Remove</button>
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -508,24 +585,33 @@ export default function AdminDashboard() {
                       <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
                     </tr></thead>
                     <tbody className="divide-y divide-slate-50">
-                      {filteredCompanies.map((c) => (
+                      {filteredCompanies.map((c) => {
+                        const st = (c.status || '').toLowerCase();
+                        const isAcceptedOrApproved = st === 'accepted' || st === 'approved';
+                        const isActiveOrOngoing = st === 'active' || st === 'ongoing';
+                        return (
                         <tr key={c.id}>
                           <td className="px-4 py-3"><div className="flex items-center gap-3"><div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold text-xs shrink-0">{(c.company_name || 'C').charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="font-semibold text-xs text-slate-800 truncate">{c.company_name}</p><p className="text-[10px] text-slate-400 truncate">{c.industry || 'General'}</p></div></div></td>
                           <td className="px-4 py-3"><span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${getStatusStyle(c.status)}`}>{c.status || 'Looking'}</span></td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              {c.status !== 'Accepted' && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'accept')} className="bg-blue-500 active:bg-blue-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">✓</button>)}
-                              {c.status === 'Accepted' && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'activate')} className="bg-emerald-500 active:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">⚡</button>)}
-                              {(c.status === 'Active' || c.status === 'Ongoing') && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, c.status === 'Active' ? 'ongoing' : 'looking')} className="bg-amber-500 active:bg-amber-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">↻</button>)}
+                              {!isAcceptedOrApproved && !isActiveOrOngoing && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'accept')} className="bg-blue-500 active:bg-blue-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">✓</button>)}
+                              {isAcceptedOrApproved && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'activate')} className="bg-emerald-500 active:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">⚡</button>)}
+                              {isActiveOrOngoing && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, st === 'active' ? 'ongoing' : 'looking')} className="bg-amber-500 active:bg-amber-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">↻</button>)}
                               <button type="button" onClick={() => showConfirm('Remove Company', `Remove "${c.company_name}"?`, () => handleDeleteCompany(c.id, c.company_name))} className="bg-red-500 active:bg-red-700 text-white p-1.5 rounded-lg transition-colors text-[10px] font-bold">✕</button>
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                   <div className="md:hidden divide-y divide-slate-100">
-                    {filteredCompanies.map((c) => (
+                    {filteredCompanies.map((c) => {
+                      const st = (c.status || '').toLowerCase();
+                      const isAcceptedOrApproved = st === 'accepted' || st === 'approved';
+                      const isActiveOrOngoing = st === 'active' || st === 'ongoing';
+                      return (
                       <div key={c.id} className="p-3 sm:p-4 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -537,14 +623,15 @@ export default function AdminDashboard() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold">{c.post_count ?? 0} posts</span>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {c.status !== 'Accepted' && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'accept')} className="bg-blue-500 active:bg-blue-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">Accept</button>)}
-                            {c.status === 'Accepted' && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'activate')} className="bg-emerald-500 active:bg-emerald-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">Active</button>)}
-                            {(c.status === 'Active' || c.status === 'Ongoing') && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, c.status === 'Active' ? 'ongoing' : 'looking')} className="bg-amber-500 active:bg-amber-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">{c.status === 'Active' ? 'Ongoing' : 'Looking'}</button>)}
+                            {!isAcceptedOrApproved && !isActiveOrOngoing && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'accept')} className="bg-blue-500 active:bg-blue-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">Accept</button>)}
+                            {isAcceptedOrApproved && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, 'activate')} className="bg-emerald-500 active:bg-emerald-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">Active</button>)}
+                            {isActiveOrOngoing && (<button type="button" onClick={() => handleCompanyAction(c.id, c.company_name, st === 'active' ? 'ongoing' : 'looking')} className="bg-amber-500 active:bg-amber-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">{st === 'active' ? 'Ongoing' : 'Looking'}</button>)}
                             <button type="button" onClick={() => showConfirm('Remove Company', `Remove "${c.company_name}"?`, () => handleDeleteCompany(c.id, c.company_name))} className="bg-red-500 active:bg-red-700 text-white px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors">Del</button>
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>)}
               </div>
@@ -563,6 +650,8 @@ export default function AdminDashboard() {
         .overflow-y-auto::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 100px; }
         * { -webkit-tap-highlight-color: transparent; }
       `}</style>
+      <FloatingChatButton />
+
     </div>
   );
 }

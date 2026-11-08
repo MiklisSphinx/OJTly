@@ -1,844 +1,665 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { logAuditAction } from '@/utils/audit';
+import { useBulkSelection, BulkActionBar, BulkCheckbox } from '@/components/BulkActions';
+import AdminNotificationBell from '@/components/AdminNotificationBell';
+import FloatingChatButton from '@/components/FloatingChatButton';
 
-// ============================================
-// INTERFACES (Matches Supabase Schema)
-// ============================================
-type Toast = {
-  id: number;
-  message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-};
+type Toast = { id: number; message: string; type: 'success' | 'error' | 'info' };
+type FilterTab = 'All' | 'Active' | 'Featured' | 'TakenDown' | 'Trash';
 
-interface OJTPost {
+interface OjtPost {
   id: string;
   title: string;
-  description: string;
-  location_name: string;
-  latitude: number;
-  longitude: number;
-  duration_hours: number;
-  skills: string[] | string;
-  work_type: string;
-  allowance_type: string;
-  course_category: string;
-  vacancies: number;
-  status: string; // 'active', 'offline', 'closed'
-  created_at: string;
-  
-  // From JOIN
-  companies?: {
-    id: string;
-    company_name: string;
-  };
+  description: string | null;
+  location_name: string | null;
+  vacancies: number | null;
+  work_type: string | null;
+  company_id: string;
+  company_name: string;
+  company_industry: string | null;
+  status: string;
+  is_featured: boolean;
+  is_deleted: boolean;
+  created_at: string | null;
+  application_count: number;
 }
 
-// ============================================
-// SVG ICON COMPONENTS
-// ============================================
-const LocationIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-  </svg>
-);
+interface ConfirmState {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmStyle: 'danger' | 'primary' | 'neutral';
+  onConfirm: () => void;
+}
 
-const ClockIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-  </svg>
-);
+const supabase = createClient();
 
-const DollarIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-  </svg>
-);
-
-const CodeIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-  </svg>
-);
-
-const CalendarIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-  </svg>
-);
-
-const UsersIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-  </svg>
-);
-
-const CheckCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-  </svg>
-);
-
-const XCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-  </svg>
-);
-
-const TrashIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-  </svg>
-);
-
-const SpinnerIcon = () => (
-  <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-  </svg>
-);
-
-// Custom Logo for Admin
-const AdminLogo = () => (
-  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-    <span className="text-white font-black text-xl">O</span>
-  </div>
-);
-
-export default function AdminCompanyPosts() {
+export default function AdminCPostPage() {
   const router = useRouter();
-  const supabase = createClient();
-  
-  // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [activeTab, setActiveTab] = useState<FilterTab>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'offline'>('all');
-  const [selectedPosts, setSelectedPosts] = useState<string[]>([]);
-
-  // Data State
-  const [posts, setPosts] = useState<OJTPost[]>([]);
+  const [posts, setPosts] = useState<OjtPost[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const bulk = useBulkSelection();
   const [loading, setLoading] = useState(true);
-  
-  // Action Loading States (per-post)
-  const [actionLoading, setActionLoading] = useState<Record<string, 'offline' | 'online' | 'delete' | null>>({});
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // ============================================
-  // FETCH ALL POSTS WITH COMPANY JOIN
-  // ============================================
-  useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        setLoading(true);
-        
-        const { data, error } = await supabase
-          .from('ojt_posts')
-          .select('*, companies(company_name)')
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Fetch error:', error.message);
-          addToast('Failed to load posts', 'error');
-          return;
-        }
-
-        console.log(`✅ Loaded ${data?.length || 0} posts`);
-        setPosts(data || []);
-
-      } catch (err) {
-        console.error('Unexpected error:', err);
-        addToast('Something went wrong', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPosts();
-  }, []);
-
-  // ============================================
-  // TOAST HELPER
-  // ============================================
-  const addToast = useCallback((message: string, type: Toast['type'] = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-  }, []);
-
-  // ============================================
-  // TOGGLE OFFLINE / ONLINE (Supabase UPDATE)
-  // ============================================
-  const handleToggleStatus = async (postId: string) => {
-    const post = posts.find(p => p.id === postId);
-    if (!post) return;
-
-    const newStatus = post.status === 'active' ? 'offline' : 'active';
-    const actionLabel = newStatus === 'active' ? 'Online' : 'Offline';
-
-    // Set loading state
-    setActionLoading(prev => ({ ...prev, [postId]: newStatus === 'active' ? 'online' : 'offline' }));
-
-    try {
-      // ✅ SUPABASE UPDATE
-      const { error } = await supabase
-        .from('ojt_posts')
-        .update({ status: newStatus })
-        .eq('id', postId);
-
-      if (error) {
-        console.error('Update error:', error.message);
-        addToast(`Failed to update status: ${error.message}`, 'error');
-        return;
-      }
-
-      // ✅ UI SYNC - Update local state immediately
-      setPosts(prev => prev.map(p => 
-        p.id === postId ? { ...p, status: newStatus } : p
-      ));
-
-      addToast(`"${post.title}" is now ${actionLabel}`, newStatus === 'active' ? 'success' : 'warning');
-
-    } catch (err) {
-      console.error('Toggle error:', err);
-      addToast('Network error. Please try again.', 'error');
-    } finally {
-      setActionLoading(prev => ({ ...prev, [postId]: null }));
-    }
-  };
-
-  // ============================================
-  // DELETE POST (Supabase DELETE)
-  // ============================================
-  const handleDeletePost = async (postId: string) => {
-    const post = posts.find(p => p.id === postId);
-    if (!post) return;
-
-    // ✅ WINDOW.CONFIRM before delete
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${post.title}"?\n\nThis action cannot be undone.`
-    );
-
-    if (!confirmed) return;
-
-    // Set loading state
-    setActionLoading(prev => ({ ...prev, [postId]: 'delete' }));
-
-    try {
-      // ✅ SUPABASE DELETE
-      const { error } = await supabase
-        .from('ojt_posts')
-        .delete()
-        .eq('id', postId);
-
-      if (error) {
-        console.error('Delete error:', error.message);
-        addToast(`Delete failed: ${error.message}`, 'error');
-        return;
-      }
-
-      // ✅ UI SYNC - Remove from local state immediately
-      setPosts(prev => prev.filter(p => p.id !== postId));
-      
-      // Also remove from selection if selected
-      setSelectedPosts(prev => prev.filter(id => id !== postId));
-
-      addToast(`"${post.title}" has been deleted`, 'error');
-
-    } catch (err) {
-      console.error('Delete error:', err);
-      addToast('Network error. Please try again.', 'error');
-    } finally {
-      setActionLoading(prev => ({ ...prev, [postId]: null }));
-    }
-  };
-
-  // ============================================
-  // BULK ACTIONS
-  // ============================================
-  const handleBulkAction = async (action: 'activate' | 'offline' | 'delete') => {
-    if (selectedPosts.length === 0) return;
-
-    const actionLabel = action === 'activate' ? 'activate' : action === 'offline' ? 'set offline' : 'delete';
-    
-    // Confirm for bulk delete
-    if (action === 'delete') {
-      const confirmed = window.confirm(
-        `Delete ${selectedPosts.length} post(s)?\n\nThis action cannot be undone.`
-      );
-      if (!confirmed) return;
-    }
-
-    try {
-      if (action === 'delete') {
-        // Bulk delete
-        const { error } = await supabase
-          .from('ojt_posts')
-          .delete()
-          .in('id', selectedPosts);
-
-        if (error) throw error;
-
-        // UI Sync
-        setPosts(prev => prev.filter(p => !selectedPosts.includes(p.id)));
-        addToast(`${selectedPosts.length} post(s) deleted`, 'error');
-
-      } else {
-        // Bulk status update
-        const newStatus = action === 'activate' ? 'active' : 'offline';
-        
-        const { error } = await supabase
-          .from('ojt_posts')
-          .update({ status: newStatus })
-          .in('id', selectedPosts);
-
-        if (error) throw error;
-
-        // UI Sync
-        setPosts(prev => prev.map(p => 
-          selectedPosts.includes(p.id) ? { ...p, status: newStatus } : p
-        ));
-        
-        addToast(`${selectedPosts.length} post(s) ${actionLabel}d`, action === 'activate' ? 'success' : 'warning');
-      }
-
-      setSelectedPosts([]);
-
-    } catch (err: any) {
-      console.error('Bulk action error:', err);
-      addToast(err?.message || 'Action failed', 'error');
-    }
-  };
-
-  // ============================================
-  // FILTER LOGIC
-  // ============================================
-  const filteredPosts = posts.filter(post => {
-    const searchLower = searchQuery.toLowerCase().trim();
-    const matchesSearch = !searchLower || 
-      post.title.toLowerCase().includes(searchLower) ||
-      (post.companies?.company_name || '').toLowerCase().includes(searchLower) ||
-      post.location_name.toLowerCase().includes(searchLower);
-    
-    const matchesStatus = statusFilter === 'all' || post.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({
+    open: false, title: '', message: '', confirmLabel: 'Confirm',
+    confirmStyle: 'danger', onConfirm: () => {},
   });
 
-  // ============================================
-  // STATS - Auto-recalculates on state change!
-  // ============================================
-  const stats = {
-    total: posts.length,
-    active: posts.filter(p => p.status === 'active').length,
-    offline: posts.filter(p => p.status === 'offline').length,
+  useEffect(() => {
+    const onResize = () => { if (window.innerWidth >= 1024) setIsSidebarOpen(false); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const addToast = useCallback((message: string, type: Toast['type'] = 'success') => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  }, []);
+
+  const describeError = (err: any): string => {
+    if (!err) return 'Unknown error';
+    if (typeof err === 'string') return err;
+    return [err.message, err.code && `code=${err.code}`, err.hint && `hint=${err.hint}`, err.details && `details=${err.details}`].filter(Boolean).join(' | ');
   };
 
-  // Selection helpers
-  const toggleSelectAll = () => {
-    if (selectedPosts.length === filteredPosts.length) {
-      setSelectedPosts([]);
+  const fetchPosts = useCallback(async () => {
+    setLoading(true);
+    try {
+      let postsData: any[] | null = null;
+      let postsError: any = null;
+      let usedFallback = false;
+
+      const fullQuery = supabase
+        .from('ojt_posts')
+        .select('id, title, description, location_name, vacancies, work_type, company_id, status, is_featured, is_deleted, created_at, applications(count)')
+        .order('created_at', { ascending: false });
+
+      const fullResult = await fullQuery;
+      postsData = fullResult.data;
+      postsError = fullResult.error;
+
+      if (postsError) {
+        console.warn('⚠️  Full query failed, trying minimal fallback:', describeError(postsError));
+        const { data: minData, error: minError } = await supabase
+          .from('ojt_posts')
+          .select('id, title, description, location_name, vacancies, work_type, company_id, status, created_at')
+          .order('created_at', { ascending: false });
+        if (minError) throw minError;
+        postsData = minData;
+        postsError = null;
+        usedFallback = true;
+      }
+
+      const companyIds = Array.from(new Set((postsData || []).map((p: any) => p.company_id).filter(Boolean)));
+      const companyMap: Record<string, { name: string; industry?: string }> = {};
+      if (companyIds.length > 0) {
+        const { data: companiesData, error: companiesError } = await supabase
+          .from('companies')
+          .select('id, company_name, industry')
+          .in('id', companyIds);
+        if (companiesError) console.warn('⚠️  Company lookup failed:', describeError(companiesError));
+        (companiesData || []).forEach((c: any) => { companyMap[c.id] = { name: c.company_name || 'Unnamed', industry: c.industry }; });
+      }
+
+      let appCountMap: Record<string, number> = {};
+      if (usedFallback && companyIds.length > 0) {
+        try {
+          const { data: appsData } = await supabase
+            .from('applications')
+            .select('post_id')
+            .in('post_id', (postsData || []).map((p: any) => p.id).filter(Boolean));
+          (appsData || []).forEach((a: any) => { if (a?.post_id) appCountMap[a.post_id] = (appCountMap[a.post_id] || 0) + 1; });
+        } catch { }
+      }
+
+      const normalized: OjtPost[] = (postsData || []).map((p: any) => {
+        const appsRel = p.applications;
+        let appCount = 0;
+        if (Array.isArray(appsRel) && appsRel.length > 0 && typeof appsRel[0] === 'object' && 'count' in appsRel[0]) {
+          appCount = appsRel[0].count || 0;
+        } else if (Array.isArray(appsRel)) {
+          appCount = appsRel.length;
+        } else if (p.id && p.id in appCountMap) {
+          appCount = appCountMap[p.id];
+        }
+        const company = p.company_id ? companyMap[p.company_id] : undefined;
+        return {
+          id: p.id || '',
+          title: p.title || 'Untitled Post',
+          description: p.description || null,
+          location_name: p.location_name || null,
+          vacancies: p.vacancies ?? null,
+          work_type: p.work_type || null,
+          company_id: p.company_id || '',
+          company_name: company?.name || 'Unknown Company',
+          company_industry: company?.industry || null,
+          status: p.status || 'active',
+          is_featured: Boolean(p.is_featured ?? false),
+          is_deleted: Boolean(p.is_deleted ?? false),
+          created_at: p.created_at || null,
+          application_count: appCount,
+        };
+      });
+
+      setPosts(normalized);
+      if (usedFallback) {
+        addToast('Some admin features are unavailable — run admin_rls.sql in Supabase to enable them.', 'info');
+      }
+    } catch (error: any) {
+      const description = describeError(error);
+      console.error('❌ Posts fetch error:', description, error);
+      addToast(`Failed to load posts: ${description}`, 'error');
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+
+  const counts = useMemo(() => {
+    const active = posts.filter(p => !p.is_deleted);
+    return {
+      all: active.length,
+      active: active.filter(p => (p.status || 'active').toLowerCase() === 'active').length,
+      featured: active.filter(p => p.is_featured).length,
+      takenDown: active.filter(p => (p.status || '').toLowerCase() === 'taken_down').length,
+      trash: posts.filter(p => p.is_deleted).length,
+    };
+  }, [posts]);
+
+  const displayedPosts = useMemo(() => {
+    let filtered = posts;
+    if (activeTab === 'Trash') {
+      filtered = filtered.filter(p => p.is_deleted);
     } else {
-      setSelectedPosts(filteredPosts.map(p => p.id));
+      filtered = filtered.filter(p => !p.is_deleted);
+      if (activeTab === 'Active') filtered = filtered.filter(p => { const st = (p.status || 'active').toLowerCase(); return st !== 'taken_down' && st !== 'archived'; });
+      if (activeTab === 'Featured') filtered = filtered.filter(p => p.is_featured);
+      if (activeTab === 'TakenDown') filtered = filtered.filter(p => (p.status || '').toLowerCase() === 'taken_down');
     }
-  };
-
-  const toggleSelectOne = (postId: string) => {
-    setSelectedPosts(prev => 
-      prev.includes(postId) ? prev.filter(id => id !== postId) : [...prev, postId]
-    );
-  };
-
-  // Status config helper
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'active':
-        return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', label: 'Active' };
-      case 'offline':
-        return { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200', dot: 'bg-slate-400', label: 'Offline' };
-      default:
-        return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200', dot: 'bg-gray-500', label: status };
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(p => (p.title || '').toLowerCase().includes(q) || (p.company_name || '').toLowerCase().includes(q) || (p.location_name || '').toLowerCase().includes(q));
     }
-  };
+    return filtered;
+  }, [posts, activeTab, searchQuery]);
 
-  // Format skills helper
-  const formatSkills = (skills: string[] | string): string[] => {
-    if (Array.isArray(skills)) return skills;
-    if (typeof skills === 'string' && skills) return skills.split(',').map(s => s.trim()).filter(Boolean);
-    return [];
-  };
-
-  // ============================================
-  // LOADING STATE
-  // ============================================
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 font-sans flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">Loading posts...</p>
-        </div>
-      </div>
-    );
+  // ---------- Group displayed posts by company ----------
+  interface CompanyGroup {
+    key: string;
+    companyName: string;
+    industry: string | null;
+    posts: OjtPost[];
   }
+  const groupedPosts = useMemo<CompanyGroup[]>(() => {
+    const map: Record<string, CompanyGroup> = {};
+    for (const post of displayedPosts) {
+      const key = post.company_id || post.company_name || 'unknown';
+      if (!map[key]) {
+        map[key] = {
+          key,
+          companyName: post.company_name || 'Unknown Company',
+          industry: post.company_industry || null,
+          posts: [],
+        };
+      }
+      map[key].posts.push(post);
+    }
+    // Sort companies alphabetically by name
+    return Object.values(map).sort((a, b) =>
+      a.companyName.localeCompare(b.companyName, undefined, { sensitivity: 'base' })
+    );
+  }, [displayedPosts]);
 
-  // ============================================
-  // MAIN RENDER
-  // ============================================
+  const hideConfirm = () => setConfirmDialog(prev => ({ ...prev, open: false }));
+  const showConfirm = (params: Omit<ConfirmState, 'open'>) => { setConfirmDialog({ ...params, open: true }); };
+
+  const handleFeature = async (postId: string, featured: boolean) => {
+    try {
+      const { error } = await supabase.from('ojt_posts').update({ is_featured: !featured }).eq('id', postId);
+      if (error) throw error;
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, is_featured: !featured } : p));
+      addToast(featured ? 'Removed from featured' : 'Post featured ⭐', 'success');
+      await logAuditAction({ action: featured ? 'post_unfeatured' : 'post_featured', target_type: 'post', target_id: postId });
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to update post', 'error');
+    }
+  };
+
+  const bulkFeature = async () => {
+    const cnt = bulk.selectedIds.length;
+    for (const id of bulk.selectedIds) {
+      const post = posts.find(p => p.id === id);
+      if (post) {
+        try {
+          const { error } = await supabase.from('ojt_posts').update({ is_featured: !post.is_featured }).eq('id', id);
+          if (error) throw error;
+          setPosts(prev => prev.map(p => p.id === id ? { ...p, is_featured: !post.is_featured } : p));
+        } catch (err) { console.error('Bulk feature error:', err); }
+      }
+    }
+    bulk.clear();
+    addToast(`${cnt} posts updated`, 'success');
+  };
+
+  const bulkTakeDown = async () => {
+    const cnt = bulk.selectedIds.length;
+    for (const id of bulk.selectedIds) {
+      try {
+        const { error } = await supabase.from('ojt_posts').update({ status: 'taken_down' }).eq('id', id);
+        if (error) throw error;
+        setPosts(prev => prev.map(p => p.id === id ? { ...p, status: 'taken_down' } : p));
+      } catch (err) { console.error('Bulk takeDown error:', err); }
+    }
+    bulk.clear();
+    addToast(`${cnt} posts taken down`, 'info');
+  };
+
+  const bulkDelete = async () => {
+    const cnt = bulk.selectedIds.length;
+    for (const id of bulk.selectedIds) {
+      try {
+        const { error } = await supabase.from('ojt_posts').update({ is_deleted: true }).eq('id', id);
+        if (error) throw error;
+        setPosts(prev => prev.map(p => p.id === id ? { ...p, is_deleted: true } : p));
+      } catch (err) { console.error('Bulk delete error:', err); }
+    }
+    bulk.clear();
+    addToast(`${cnt} posts moved to trash`, 'info');
+  };
+
+  const handleTakeDown = async (postId: string) => {
+    hideConfirm();
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.from('ojt_posts').update({ status: 'taken_down' }).eq('id', postId);
+      if (error) throw error;
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, status: 'taken_down' } : p));
+      const post = posts.find(p => p.id === postId);
+      try {
+        if (post?.company_id) {
+          const { data: company } = await supabase.from('companies').select('user_id').eq('id', post.company_id).maybeSingle();
+          if (company?.user_id) {
+            await supabase.from('notifications').insert({ user_id: company.user_id, title: 'Post Taken Down by Admin 🚫', message: `Your post "${post.title}" has been taken down by the administrator. Students will no longer see this post. Please contact admin if you have questions.`, type: 'admin_action', is_read: false, link_url: '/company_ojtpost' });
+          }
+        }
+      } catch (e) { console.warn('⚠️ Company notify failed:', e); }
+      try {
+        const { data: acceptedApps } = await supabase.from('applications').select('student_id').eq('post_id', postId).in('status', ['Accepted', 'accepted', 'Active', 'active', 'Ongoing', 'ongoing']);
+        for (const app of (acceptedApps || [])) {
+          await supabase.from('notifications').insert({ user_id: app.student_id, title: 'OJT Post Taken Down 🚫', message: `The OJT post "${post?.title || 'your post'}" has been taken down by the administrator. Please check the map for other available OJT opportunities or contact your school coordinator.`, type: 'admin_action', is_read: false, link_url: '/map' });
+          await supabase.from('applications').update({ status: 'Pending' }).eq('post_id', postId).eq('student_id', app.student_id);
+          await supabase.from('profiles').update({ ojt_status: 'Unassigned', assigned_company: null }).eq('id', app.student_id);
+        }
+      } catch (e) { console.warn('⚠️ Student reset failed:', e); }
+      await logAuditAction({ action: 'post_taken_down', target_type: 'post', target_id: postId });
+      addToast('Post taken down — students will no longer see it', 'info');
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to take down post', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRestore = async (postId: string) => {
+    hideConfirm();
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.from('ojt_posts').update({ status: 'active', is_deleted: false }).eq('id', postId);
+      if (error) throw error;
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, status: 'active', is_deleted: false } : p));
+      await logAuditAction({ action: 'post_restored', target_type: 'post', target_id: postId });
+      addToast('Post restored to active', 'success');
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to restore post', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleMoveToTrash = async (postId: string) => {
+    hideConfirm();
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.from('ojt_posts').update({ is_deleted: true }).eq('id', postId);
+      if (error) throw error;
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, is_deleted: true } : p));
+      const post = posts.find(p => p.id === postId);
+      try {
+        if (post?.company_id) {
+          const { data: company } = await supabase.from('companies').select('user_id').eq('id', post.company_id).maybeSingle();
+          if (company?.user_id) {
+            await supabase.from('notifications').insert({ user_id: company.user_id, title: 'Post Deleted by Admin 🗑️', message: `Your post "${post.title}" has been moved to trash by the administrator.`, type: 'admin_action', is_read: false, link_url: '/company_ojtpost' });
+          }
+        }
+      } catch (e) { console.warn('⚠️ Company notify failed:', e); }
+      try {
+        const { data: acceptedApps } = await supabase.from('applications').select('student_id').eq('post_id', postId).in('status', ['Accepted', 'accepted', 'Active', 'active', 'Ongoing', 'ongoing']);
+        for (const app of (acceptedApps || [])) {
+          await supabase.from('notifications').insert({ user_id: app.student_id, title: 'OJT Post Removed 🗑️', message: `The OJT post "${post?.title || 'your post'}" has been removed by the administrator. Please check the map for other available OJT opportunities.`, type: 'admin_action', is_read: false, link_url: '/map' });
+          await supabase.from('applications').update({ status: 'Pending' }).eq('post_id', postId).eq('student_id', app.student_id);
+          await supabase.from('profiles').update({ ojt_status: 'Unassigned', assigned_company: null }).eq('id', app.student_id);
+        }
+      } catch (e) { console.warn('⚠️ Student reset failed:', e); }
+      await logAuditAction({ action: 'post_deleted', target_type: 'post', target_id: postId });
+      addToast('Post moved to Trash 🗑️', 'info');
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to move post to trash', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePermanentDelete = async (postId: string) => {
+    hideConfirm();
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.from('ojt_posts').delete().eq('id', postId);
+      if (error) throw error;
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      addToast('Post permanently deleted', 'info');
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to delete permanently', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const formatDate = (iso: string | null | undefined) => {
+    if (!iso) return 'Unknown date';
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const truncate = (s: string | null | undefined, n: number) => (s && s.length > n) ? s.slice(0, n) + '…' : (s || '');
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 font-sans">
-
-      {/* Toast Container */}
-      <div className="fixed top-3 left-3 right-3 sm:left-auto sm:right-4 sm:top-4 sm:max-w-sm z-[100] flex flex-col gap-2">
+      <div className="fixed top-3 left-3 right-3 sm:left-auto sm:right-4 sm:top-4 sm:max-w-sm z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.map(toast => (
-          <div key={toast.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm animate-slide-in ${
-              toast.type === 'success' ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800' :
-              toast.type === 'error' ? 'bg-red-50/95 border-red-200 text-red-800' :
-              toast.type === 'warning' ? 'bg-amber-50/95 border-amber-200 text-amber-800' :
-              'bg-blue-50/95 border-blue-200 text-blue-800'
-            }`}>
-            <span className={`shrink-0 ${
-              toast.type === 'success' ? 'text-emerald-600' :
-              toast.type === 'error' ? 'text-red-600' :
-              toast.type === 'warning' ? 'text-amber-600' : 'text-blue-600'
-            }`}>
-              {toast.type === 'success' ? <CheckCircleIcon className="w-5 h-5" /> :
-               toast.type === 'error' ? <XCircleIcon className="w-5 h-5" /> :
-               toast.type === 'warning' ? <span className="font-bold text-sm">!</span> :
-               <span className="font-bold text-sm">i</span>}
-            </span>
+          <div key={toast.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm animate-slide-in ${toast.type === 'success' ? 'bg-emerald-50/95 border-emerald-200 text-emerald-800' : toast.type === 'error' ? 'bg-red-50/95 border-red-200 text-red-800' : 'bg-blue-50/95 border-blue-200 text-blue-800'}`}>
+            <span className="text-sm font-bold shrink-0">{toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}</span>
             <p className="text-xs font-medium flex-1 leading-relaxed">{toast.message}</p>
-            <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0 p-0.5">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className="text-slate-400 hover:text-slate-600 shrink-0 p-0.5"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
           </div>
         ))}
       </div>
 
-      {/* Mobile Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity" onClick={() => setIsSidebarOpen(false)} />
+      {confirmDialog.open && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ isolation: 'isolate' }}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !actionLoading && hideConfirm()} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 sm:p-6 animate-fade-in">
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${confirmDialog.confirmStyle === 'danger' ? 'bg-red-100' : confirmDialog.confirmStyle === 'primary' ? 'bg-blue-100' : 'bg-slate-100'}`}>
+                <svg className={`w-5 h-5 ${confirmDialog.confirmStyle === 'danger' ? 'text-red-600' : confirmDialog.confirmStyle === 'primary' ? 'text-blue-600' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+              </div>
+              <h3 className="font-bold text-slate-800 text-sm sm:text-base">{confirmDialog.title}</h3>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mb-5 pl-[52px]">{confirmDialog.message}</p>
+            <div className="flex gap-2.5">
+              <button onClick={hideConfirm} disabled={actionLoading} className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold transition-colors">Cancel</button>
+              <button onClick={() => confirmDialog.onConfirm()} disabled={actionLoading} className={`flex-1 px-4 py-2.5 text-white rounded-xl text-xs sm:text-sm font-semibold transition-colors shadow-lg disabled:opacity-50 ${confirmDialog.confirmStyle === 'danger' ? 'bg-red-600 hover:bg-red-700 shadow-red-600/25' : confirmDialog.confirmStyle === 'primary' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/25' : 'bg-slate-700 hover:bg-slate-800 shadow-slate-700/25'}`}>
+                {actionLoading ? (<span className="flex items-center justify-center gap-1.5"><svg className="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Working...</span>) : confirmDialog.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* SIDEBAR */}
-      <aside className={`fixed top-0 left-0 z-50 h-full w-[280px] bg-[#0f172a] text-white transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-        
-        <div className="p-6 pb-4">
-          <Link href="/" className="flex items-center gap-3 group" onClick={() => setIsSidebarOpen(false)}>
-            <AdminLogo />
-            <div>
-              <span className="text-xl font-bold tracking-tight text-white block leading-tight">OJTly</span>
-              <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Admin Panel</span>
-            </div>
+      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
+
+      <aside className={`fixed top-0 left-0 z-50 h-full w-[280px] bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <div className="p-5 pb-4">
+          <Link href="/" className="flex items-center gap-3" onClick={() => setIsSidebarOpen(false)}>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25"><span className="text-white font-black text-lg">O</span></div>
+            <div><span className="text-xl font-bold tracking-tight text-white">OJTly</span><p className="text-[10px] text-slate-400 font-medium tracking-wider uppercase">Admin Panel</p></div>
           </Link>
         </div>
-
-        <nav className="px-4 space-y-1 mt-2">
-          <p className="px-4 py-2 text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase">Main</p>
-          
-          <Link href="/admin_main" className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all duration-200 group">
-            <svg className="w-5 h-5 text-slate-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-            </svg>
-            <span>Dashboard</span>
+        <nav className="px-3 space-y-0.5">
+          <p className="px-4 py-2 text-[10px] font-bold tracking-widest text-slate-500 uppercase">Main</p>
+          <Link href="/admin_main" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors group" onClick={() => setIsSidebarOpen(false)}>
+            <svg className="w-[18px] h-[18px] group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+            <span className="flex-1">Dashboard</span>
           </Link>
-
-          <Link href="/admin_cpost" className="flex items-center gap-3 px-4 py-3 bg-[#1e293b] rounded-xl font-medium text-white border border-white/5">
-            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
+          <Link href="/admin_cpost" className="flex items-center gap-3 px-4 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl font-medium text-white border border-white/5" onClick={() => setIsSidebarOpen(false)}>
+            <svg className="w-[18px] h-[18px] text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             <span className="flex-1">Company Posts</span>
-            <span className="bg-indigo-500 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">{stats.active}</span>
           </Link>
-
-          <Link href="/admin_approval" className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all duration-200 group">
-            <svg className="w-5 h-5 text-slate-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-            </svg>
-            <span>Company Approvals</span>
+          <Link href="/admin_approval" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors group" onClick={() => setIsSidebarOpen(false)}>
+            <svg className="w-[18px] h-[18px] group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+            <span className="flex-1">Approvals</span>
           </Link>
-
-          <p className="px-4 pt-5 pb-2 text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase">Analytics</p>
-
-          <Link href="/admin_reports" className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all duration-200 group">
-            <svg className="w-5 h-5 text-slate-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <span>Reports</span>
+          <p className="px-4 pt-4 pb-2 text-[10px] font-bold tracking-widest text-slate-500 uppercase">System</p>
+          <Link href="/admin_reports" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors group" onClick={() => setIsSidebarOpen(false)}>
+            <svg className="w-[18px] h-[18px] group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span className="flex-1">Reports</span>
           </Link>
-
-          <Link href="/admin_settings" className="flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-all duration-200 group">
-            <svg className="w-5 h-5 text-slate-400 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            <span>Settings</span>
+          <Link href="/admin_settings" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl font-medium transition-colors group" onClick={() => setIsSidebarOpen(false)}>
+            <svg className="w-[18px] h-[18px] group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span className="flex-1">Settings</span>
           </Link>
         </nav>
-
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl font-medium transition-all duration-200">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-            </svg>
-            <span>Log out</span>
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/5">
+          <div className="flex items-center gap-3 px-3 py-2 mb-2">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/20">A</div>
+            <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-white truncate">Admin User</p><p className="text-[11px] text-slate-500 truncate">admin@ojtly.com</p></div>
+          </div>
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl font-medium transition-colors w-full text-sm">
+            <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            Log out
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="lg:ml-[280px] min-h-screen">
-        
-        {/* Header */}
         <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 h-14 sm:h-16">
           <div className="px-4 sm:px-6 h-full flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors -ml-1">
-                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
               </button>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                </div>
-                <div>
-                  <h1 className="text-sm sm:text-base font-bold text-slate-800">Company Posts</h1>
-                  <p className="text-[10px] sm:text-[11px] text-slate-400 -mt-0.5 hidden sm:block">Manage all OJT job postings</p>
-                </div>
-              </div>
+              <div><h1 className="text-sm sm:text-base font-bold text-slate-800">Company Posts</h1><p className="text-[10px] sm:text-[11px] text-slate-400 -mt-0.5 hidden sm:block">Manage all OJT posts on the platform</p></div>
             </div>
             <div className="flex items-center gap-2">
-              <button className="relative p-2 sm:p-2.5 hover:bg-slate-100 rounded-xl transition-colors">
-                <svg className="w-[18px] h-[18px] text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+              <AdminNotificationBell />
+              <button onClick={() => fetchPosts()} disabled={loading} className="p-2 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50" title="Refresh">
+                <svg className={`w-4 h-4 text-slate-600 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               </button>
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xs shadow-md">A</div>
             </div>
           </div>
         </header>
 
         <div className="p-3 sm:p-5 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-
-          {/* STATS DASHBOARD */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-            
-            {/* Total Posts Card */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-slate-600 via-slate-700 to-slate-800 rounded-2xl p-5 sm:p-6 text-white shadow-xl shadow-slate-500/20">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-              
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs sm:text-sm font-semibold opacity-80 uppercase tracking-wider">Total Posts</p>
-                  <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                  </div>
-                </div>
-                <p className="text-4xl sm:text-5xl font-black tracking-tight">{stats.total}</p>
-                <p className="text-xs sm:text-sm mt-2 opacity-60">All job postings</p>
-              </div>
-            </div>
-
-            {/* Active Posts Card */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700 rounded-2xl p-5 sm:p-6 text-white shadow-xl shadow-emerald-500/30">
-              <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-              <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-              
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs sm:text-sm font-semibold opacity-90 uppercase tracking-wider">Active</p>
-                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                    <CheckCircleIcon />
-                  </div>
-                </div>
-                <p className="text-4xl sm:text-5xl font-black tracking-tight">{stats.active}</p>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                  <p className="text-xs sm:text-sm opacity-80">Live postings</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Offline Posts Card */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-gray-400 via-gray-500 to-gray-600 rounded-2xl p-5 sm:p-6 text-white shadow-xl shadow-gray-400/20">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-              
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs sm:text-sm font-semibold opacity-90 uppercase tracking-wider">Offline</p>
-                  <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                    <XCircleIcon />
-                  </div>
-                </div>
-                <p className="text-4xl sm:text-5xl font-black tracking-tight">{stats.offline}</p>
-                <p className="text-xs sm:text-sm mt-2 opacity-70">Inactive postings</p>
-              </div>
-            </div>
-
+          <div>
+            <h2 className="text-lg sm:text-2xl font-bold text-slate-800">OJT Posts Management</h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Feature, take down, or remove posts that violate platform guidelines.</p>
           </div>
 
-          {/* Controls Bar */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5">
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-              
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-1">
-                <div className="relative flex-1 max-w-md">
-                  <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                  <input
-                    type="text"
-                    placeholder="Search posts or companies..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition placeholder:text-slate-400"
-                  />
-                </div>
-
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
-                >
-                  <option value="all">All Status ({stats.total})</option>
-                  <option value="active">Active ({stats.active})</option>
-                  <option value="offline">Offline ({stats.offline})</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {selectedPosts.length > 0 && (
-                  <div className="flex items-center gap-2 animate-fade-in bg-indigo-50 px-3 py-2 rounded-xl">
-                    <span className="text-xs font-semibold text-indigo-700">{selectedPosts.length} selected</span>
-                    <button onClick={() => handleBulkAction('activate')} className="px-3 py-1.5 bg-emerald-500 text-white text-xs font-semibold rounded-lg hover:bg-emerald-600 transition-colors shadow-sm">
-                      Activate
-                    </button>
-                    <button onClick={() => handleBulkAction('offline')} className="px-3 py-1.5 bg-gray-500 text-white text-xs font-semibold rounded-lg hover:bg-gray-600 transition-colors shadow-sm">
-                      Offline
-                    </button>
-                    <button onClick={() => handleBulkAction('delete')} className="px-3 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg hover:bg-red-600 transition-colors shadow-sm">
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5 space-y-4">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input type="text" placeholder="Search by post title, company name, or location..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} disabled={loading} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50" />
+            </div>
+            <div className="flex gap-1.5 bg-slate-100 p-1.5 rounded-xl overflow-x-auto">
+              {([ { key: 'All', label: 'All', count: counts.all }, { key: 'Active', label: 'Active', count: counts.active }, { key: 'Featured', label: '⭐ Featured', count: counts.featured }, { key: 'TakenDown', label: 'Taken Down', count: counts.takenDown }, { key: 'Trash', label: '🗑️ Trash', count: counts.trash } ] as { key: FilterTab; label: string; count: number }[]).map(tab => (
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)} disabled={loading} className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${activeTab === tab.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}`}>
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === tab.key ? 'bg-blue-500 text-white' : 'bg-slate-300 text-slate-600'}`}>{tab.count}</span>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Results Count */}
-          <div className="flex items-center justify-between px-1">
-            <p className="text-sm text-slate-500">
-              Showing <span className="font-bold text-slate-800">{filteredPosts.length}</span> of <span className="font-bold text-slate-800">{stats.total}</span> posts
-            </p>
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 transition-colors">
-                Clear search
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            )}
-          </div>
-
-          {/* GRID VIEW */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
-            {filteredPosts.length === 0 ? (
-              <div className="col-span-full py-16 text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-inner">
-                  <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                </div>
-                <p className="font-bold text-lg text-slate-700">No posts found</p>
-                <p className="text-sm text-slate-400 mt-1.5">Try adjusting your search or filter</p>
-                {(searchQuery || statusFilter !== 'all') && (
-                  <button 
-                    onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}
-                    className="mt-4 px-5 py-2.5 bg-indigo-500 text-white text-sm font-semibold rounded-xl hover:bg-indigo-600 transition-all shadow-md shadow-indigo-500/25"
+          {loading ? (
+            <div className="space-y-3">{[1, 2, 3].map(i => (<div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 animate-pulse"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-200 rounded-xl"></div><div className="flex-1 space-y-2"><div className="h-4 bg-slate-200 rounded-lg w-3/4"></div><div className="h-3 bg-slate-100 rounded-lg w-1/2"></div></div><div className="h-8 bg-slate-200 rounded-lg w-20 hidden sm:block"></div></div></div>))}</div>
+          ) : displayedPosts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-10 sm:p-16 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mb-4"><span className="text-3xl">{activeTab === 'Trash' ? '🗑️' : searchQuery ? '🔍' : activeTab === 'Featured' ? '⭐' : activeTab === 'TakenDown' ? '🚫' : '📭'}</span></div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-800 mb-1">{activeTab === 'Trash' ? 'Trash is Empty' : searchQuery ? 'No results found' : activeTab === 'Featured' ? 'No featured posts' : activeTab === 'TakenDown' ? 'No taken-down posts' : 'No posts yet'}</h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-md">{activeTab === 'Trash' ? 'Posts moved to trash will appear here.' : searchQuery ? `No posts matching "${searchQuery}".` : activeTab === 'Featured' ? 'Feature posts to highlight them at the top of student searches.' : activeTab === 'TakenDown' ? 'Posts you take down will appear here for restoration.' : 'Companies\' OJT posts will appear here once they publish them.'}</p>
+              {searchQuery && (<button onClick={() => setSearchQuery('')} className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors">Clear Search</button>)}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* ============ Company Selector Cards ============ */}
+              <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 shadow-sm p-3 sm:p-4">
+                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Select Company</h3>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {/* "All Posts" card */}
+                  <button
+                    onClick={() => setSelectedCompany(null)}
+                    className={`shrink-0 rounded-xl border-2 px-3 py-2.5 transition-all flex items-center gap-2.5 min-w-[150px] text-left ${
+                      selectedCompany === null
+                        ? 'border-emerald-400 bg-emerald-50 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                    }`}
                   >
-                    Clear all filters
-                  </button>
-                )}
-              </div>
-            ) : (
-              filteredPosts.map((post) => {
-                const statusCfg = getStatusConfig(post.status);
-                const isSelected = selectedPosts.includes(post.id);
-                const isLoading = !!actionLoading[post.id];
-                const skillsList = formatSkills(post.skills);
-                
-                return (
-                  <div key={post.id} className={`group relative bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-slate-200 hover:-translate-y-1 transition-all duration-300 overflow-hidden ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-200 shadow-lg' : ''} ${isLoading ? 'opacity-70 pointer-events-none' : ''}`}>
-                    
-                    {/* Selection Checkbox */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSelectOne(post.id);
-                      }}
-                      disabled={isLoading}
-                      className={`absolute top-3.5 left-3.5 z-10 w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all ${
-                        isSelected 
-                          ? 'bg-indigo-500 border-indigo-500 text-white shadow-md' 
-                          : 'border-slate-200 bg-white opacity-0 group-hover:opacity-100 hover:border-indigo-400'
-                      }`}
-                    >
-                      {isSelected && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
-                    </button>
-
-                    {/* Status Badge */}
-                    <div className={`absolute top-3.5 right-3.5 z-10 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border shadow-sm ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`}></span>
-                      {statusCfg.label}
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                      selectedCompany === null
+                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white'
+                        : 'bg-gradient-to-br from-slate-400 to-slate-600 text-white'
+                    }`}>
+                      All
                     </div>
-
-                    {/* Loading Overlay */}
-                    {isLoading && (
-                      <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 flex items-center justify-center">
-                        <SpinnerIcon />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-slate-800 truncate">All Posts</p>
+                      <p className="text-[10px] text-slate-500 truncate">{displayedPosts.length} total posts</p>
+                    </div>
+                    {selectedCompany === null && (
+                      <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
+                        ✓
                       </div>
                     )}
+                  </button>
 
-                    {/* Card Body */}
-                    <div className="p-5 pt-11">
-                      
-                      {/* Title */}
-                      <h3 className="font-bold text-base text-slate-800 leading-snug mb-1.5 group-hover:text-indigo-600 transition-colors pr-16 line-clamp-1">{post.title}</h3>
-                      
-                      {/* Company Name from JOIN */}
-                      <p className="text-sm text-teal-600 font-semibold mb-5 truncate">
-                        {post.companies?.company_name || 'Unknown Company'}
-                      </p>
-
-                      {/* Info Items */}
-                      <div className="space-y-3.5 mb-5">
-                        
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center shrink-0 text-slate-500">
-                            <LocationIcon />
-                          </div>
-                          <span className="text-sm text-slate-700 truncate">{post.location_name || 'Not specified'}</span>
+                  {/* Company cards */}
+                  {groupedPosts.map(group => {
+                    const isSelected = selectedCompany === group.key;
+                    return (
+                      <button
+                        key={group.key}
+                        onClick={() => setSelectedCompany(group.key)}
+                        className={`shrink-0 rounded-xl border-2 px-3 py-2.5 transition-all flex items-center gap-2.5 min-w-[160px] text-left ${
+                          isSelected
+                            ? 'border-emerald-400 bg-emerald-50 shadow-sm'
+                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                          isSelected
+                            ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white'
+                            : 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white'
+                        }`}>
+                          {(group.companyName || '?').charAt(0).toUpperCase()}
                         </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center shrink-0 text-slate-500">
-                            <ClockIcon />
-                          </div>
-                          <span className="text-sm text-slate-700">{post.duration_hours || 0} Hours</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-bold text-slate-800 truncate">{group.companyName}</p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {group.posts.length} post{group.posts.length !== 1 ? 's' : ''}
+                            {group.industry ? ` · ${group.industry}` : ''}
+                          </p>
                         </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center shrink-0 text-slate-500">
-                            <DollarIcon />
+                        {isSelected && (
+                          <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm">
+                            ✓
                           </div>
-                          <span className={`text-sm font-medium ${post.allowance_type === 'Paid' ? 'text-green-600 font-semibold' : 'text-slate-600'}`}>{post.allowance_type || 'Unpaid'}</span>
-                        </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center shrink-0 text-slate-500">
-                            <CodeIcon />
-                          </div>
-                          <span className="text-sm text-slate-700 truncate">{skillsList.slice(0, 3).join(', ') || 'Not specified'}{skillsList.length > 3 ? ` (+${skillsList.length - 3})` : ''}</span>
-                        </div>
-
+              {/* ============ Posts for selected company ============ */}
+              <div className="space-y-3">
+                {(selectedCompany === null
+                  ? displayedPosts
+                  : (groupedPosts.find(g => g.key === selectedCompany)?.posts || [])
+                ).map(post => (
+                <div key={post.id} className={`bg-white rounded-xl sm:rounded-2xl border shadow-sm hover:shadow-md transition-all p-4 sm:p-5 ${post.is_deleted ? 'border-slate-200 opacity-75' : post.status?.toLowerCase() === 'taken_down' ? 'border-amber-200 bg-amber-50/30' : post.is_featured ? 'border-amber-300 bg-amber-50/40' : 'border-slate-100'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                    <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-bold text-base sm:text-lg shrink-0 ${post.is_deleted ? 'bg-slate-200 text-slate-500' : 'bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600'}`}>{(post.company_name || '?').charAt(0).toUpperCase()}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        {post.is_featured && !post.is_deleted && (<span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200">⭐ Featured</span>)}
+                        {post.is_deleted ? (<span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-600 border border-slate-300 uppercase">Archived</span>) : post.status?.toLowerCase() === 'taken_down' ? (<span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 border border-amber-200 uppercase">Taken Down</span>) : (<span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 border border-emerald-200 uppercase">Active</span>)}
                       </div>
-
-                      {/* Description */}
-                      <p className="text-sm text-slate-500 leading-relaxed mb-4 line-clamp-2">{post.description || 'No description available.'}</p>
-
-                      {/* Date */}
-                      <div className="flex items-center gap-2.5 text-xs text-slate-400 mb-4 pb-4 border-b border-slate-100">
-                        <CalendarIcon />
-                        <span>Posted {new Date(post.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      </div>
-
-                      {/* Footer Actions */}
-                      <div className="flex items-center justify-between pt-2">
-                        
-                        {/* Vacancies Count */}
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-600">
-                            <UsersIcon />
-                          </div>
-                          <span className="font-bold text-teal-700 text-sm">{post.vacancies || 1} Slot{(post.vacancies || 1) > 1 ? 's' : ''}</span>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-1.5">
-                          
-                          {/* Toggle Status Button */}
-                          <button
-                            onClick={() => handleToggleStatus(post.id)}
-                            disabled={isLoading}
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                              isLoading ? 'cursor-not-allowed opacity-50' :
-                              post.status === 'active' 
-                                ? 'hover:bg-red-50 text-slate-400 hover:text-red-500' 
-                                : 'hover:bg-emerald-50 text-slate-400 hover:text-emerald-500'
-                            }`}
-                            title={post.status === 'active' ? 'Set offline' : 'Set active'}
-                          >
-                            {actionLoading[post.id] === 'offline' || actionLoading[post.id] === 'online' ? (
-                              <SpinnerIcon />
-                            ) : post.status === 'active' ? (
-                              <XCircleIcon />
-                            ) : (
-                              <CheckCircleIcon />
-                            )}
-                          </button>
-
-                          {/* Delete Button */}
-                          <button
-                            onClick={() => handleDeletePost(post.id)}
-                            disabled={isLoading}
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all ${
-                              isLoading ? 'cursor-not-allowed opacity-50' : ''
-                            }`}
-                            title="Delete post"
-                          >
-                            {actionLoading[post.id] === 'delete' ? (
-                              <SpinnerIcon />
-                            ) : (
-                              <TrashIcon />
-                            )}
-                          </button>
-
-                        </div>
+                      <h3 className={`text-sm sm:text-base font-bold text-slate-800 truncate ${post.is_deleted ? 'line-through text-slate-500' : ''}`}>{post.title}</h3>
+                      <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">{post.company_name}{post.company_industry ? ` · ${post.company_industry}` : ''}</p>
+                      {post.description && (<p className="text-xs text-slate-400 mt-1.5 line-clamp-2 hidden sm:block">{truncate(post.description, 180)}</p>)}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[10px] sm:text-xs text-slate-400">
+                        {post.location_name && (<span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>{post.location_name}</span>)}
+                        {post.vacancies != null && (<span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>{post.vacancies} vacanc{post.vacancies === 1 ? 'y' : 'ies'}</span>)}
+                        {post.work_type && (<span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>{post.work_type}</span>)}
+                        <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>{(post.application_count ?? 0)} application{(post.application_count ?? 0) === 1 ? '' : 's'}</span>
+                        <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>{formatDate(post.created_at)}</span>
                       </div>
                     </div>
+                    <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:flex-col sm:items-stretch pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      {post.is_deleted ? (
+                        <div className="flex items-center gap-2 w-full">
+                          <button onClick={() => showConfirm({ title: 'Restore Post', message: `Restore "${post.title}"? It will become visible to students again.`, confirmLabel: 'Restore', confirmStyle: 'primary', onConfirm: () => handleRestore(post.id) })} disabled={actionLoading} className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Restore
+                          </button>
+                          <button onClick={() => showConfirm({ title: 'Delete Permanently', message: `Permanently delete "${post.title}"? This CANNOT be undone.`, confirmLabel: 'Delete Forever', confirmStyle: 'danger', onConfirm: () => handlePermanentDelete(post.id) })} disabled={actionLoading} className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            Delete Forever
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <BulkCheckbox checked={bulk.isSelected(post.id)} onChange={() => bulk.toggle(post.id)} />
+                          <button onClick={() => handleFeature(post.id, post.is_featured)} disabled={actionLoading} className={`flex-1 sm:w-full px-3 py-2 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 ${post.is_featured ? 'bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-200' : 'bg-white hover:bg-amber-50 text-amber-600 border border-amber-200'}`}>
+                            <span>{post.is_featured ? '⭐' : '☆'}</span>
+                            {post.is_featured ? 'Unfeature' : 'Feature'}
+                          </button>
+                          {post.status?.toLowerCase() === 'taken_down' ? (
+                            <button onClick={() => showConfirm({ title: 'Restore Post', message: `Restore "${post.title}" to active status? Students will see it again.`, confirmLabel: 'Restore', confirmStyle: 'primary', onConfirm: () => handleRestore(post.id) })} disabled={actionLoading} className="flex-1 sm:w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-xs font-semibold rounded-lg transition-colors">↺ Restore</button>
+                          ) : (
+                            <button onClick={() => showConfirm({ title: 'Take Down Post', message: `Take down "${post.title}"? Students will no longer see this post.`, confirmLabel: 'Take Down', confirmStyle: 'danger', onConfirm: () => handleTakeDown(post.id) })} disabled={actionLoading} className="flex-1 sm:w-full px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-400 text-white text-xs font-semibold rounded-lg transition-colors">Take Down</button>
+                          )}
+                          <button onClick={() => showConfirm({ title: 'Move to Trash', message: `Move "${post.title}" to trash? It will be hidden from all views until restored.`, confirmLabel: 'Move to Trash', confirmStyle: 'danger', onConfirm: () => handleMoveToTrash(post.id) })} disabled={actionLoading} className="flex-1 sm:w-full px-3 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-semibold rounded-lg transition-colors">Delete</button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                );
-              })
-            )}
-          </div>
+                </div>
+                ))}
+              </div>
+            </div>
+          )}
 
+          {!loading && posts.length > 0 && (<div className="text-center text-xs text-slate-400 pt-2">Showing {(selectedCompany === null ? displayedPosts.length : (groupedPosts.find(g => g.key === selectedCompany)?.posts.length || 0))} of {posts.length} total posts across {groupedPosts.length} compan{groupedPosts.length === 1 ? 'y' : 'ies'}</div>)}
         </div>
       </main>
 
+      <BulkActionBar count={bulk.count} actions={[{ label: 'Feature', style: 'primary', onClick: bulkFeature }, { label: 'Take Down', style: 'danger', onClick: bulkTakeDown }, { label: 'Delete', style: 'danger', onClick: bulkDelete }]} onClear={bulk.clear} />
+
       <style jsx global>{`
-        @keyframes slide-in {
-          from { opacity: 0; transform: translateX(100%); }
-          to { opacity: 1; transform: translateX(0); }
-        }
+        @keyframes slide-in { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
-
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in { animation: fade-in 0.2s ease-out; }
-
-        .line-clamp-1 {
-          display: -webkit-box;
-          -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in 0.3s ease-out; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         * { -webkit-tap-highlight-color: transparent; }
       `}</style>
+      <FloatingChatButton />
+
     </div>
   );
 }

@@ -1,10 +1,15 @@
 'use client';
 
 import { Suspense } from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
+
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function ResetPasswordPage() {
   return (
@@ -16,7 +21,6 @@ export default function ResetPasswordPage() {
 
 function ResetPasswordContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,16 +29,109 @@ function ResetPasswordContent() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // 'checking' → 'ready' (form shown) | 'error' (invalid link)
+  const [sessionStatus, setSessionStatus] = useState<'checking' | 'ready' | 'error'>('checking');
 
-  // Check if user has valid session (from email link)
+  // Ref to prevent the stale-closure bug where the timeout would overwrite
+  // a successful 'ready' state with 'error'. We track resolution once.
+  const resolvedRef = useRef(false);
+
+  // ============================================================
+  // AUTH SESSION DETECTION — robust version using onAuthStateChange
+  // + URL hash check + getSession fallback.
+  //
+  // The original bug: it only called getSession() once on mount,
+  // which races with Supabase's URL-hash token exchange. If
+  // getSession ran before the token was exchanged, it returned
+  // null → "Invalid reset link" error even though the link was fine.
+  //
+  // Fix: also listen for the PASSWORD_RECOVERY event, which fires
+  // AFTER the token exchange completes.
+  // ============================================================
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+    let mounted = true;
+    resolvedRef.current = false;
+
+    const markReady = () => {
+      if (mounted && !resolvedRef.current) {
+        resolvedRef.current = true;
+        setSessionStatus('ready');
+      }
+    };
+    const markError = () => {
+      if (mounted && !resolvedRef.current) {
+        resolvedRef.current = true;
+        setSessionStatus('error');
         setError('Invalid or expired reset link. Please request a new one.');
       }
     };
+
+    // 1. Listen for the PASSWORD_RECOVERY event — this is the
+    //    RELIABLE signal that the email link was clicked and the
+    //    recovery token was successfully exchanged for a session.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event);
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        markReady();
+      } else if (event === 'SIGNED_OUT' && !session) {
+        // Only mark error if we never resolved
+        if (!resolvedRef.current) markError();
+      }
+    });
+
+    // 2. Check URL hash for recovery token (covers the case where
+    //    onAuthStateChange already fired before this component mounted)
+    const checkSession = async () => {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const tokenType = hashParams.get('type');
+
+        if (accessToken || tokenType === 'recovery') {
+          console.log('Found recovery token in URL hash');
+          // Give Supabase a moment to exchange the token, then verify
+          setTimeout(async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              markReady();
+            } else {
+              markError();
+            }
+          }, 300);
+          return;
+        }
+
+        // No recovery token in URL — check existing session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // Existing session — allow password update
+          markReady();
+        } else {
+          markError();
+        }
+      } catch (err) {
+        console.error('Session check error:', err);
+        markError();
+      }
+    };
+
     checkSession();
+
+    // 3. Fallback timeout — if after 5s we still haven't resolved, show error.
+    //    Uses functional state update so it doesn't overwrite a successful 'ready'.
+    const timeoutId = setTimeout(() => {
+      setSessionStatus((prev) => prev === 'checking' ? 'error' : prev);
+      if (!resolvedRef.current) {
+        resolvedRef.current = true;
+        setError('Invalid or expired reset link. Please request a new one.');
+      }
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Password strength calculator
@@ -60,7 +157,6 @@ function ResetPasswordContent() {
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (password.length < 8) {
       setError('Password must be at least 8 characters long');
       return;
@@ -74,7 +170,6 @@ function ResetPasswordContent() {
     setIsLoading(true);
 
     try {
-      // Real Supabase call to update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: password,
       });
@@ -83,14 +178,11 @@ function ResetPasswordContent() {
         throw updateError;
       }
 
-      // Success!
       setIsSuccess(true);
 
-      // Redirect to login after 3 seconds
       setTimeout(() => {
         router.push('/company/login?message=Password+updated+successfully');
       }, 3000);
-
     } catch (err: any) {
       setError(err.message || 'Failed to reset password. Please try again.');
     } finally {
@@ -98,18 +190,84 @@ function ResetPasswordContent() {
     }
   };
 
+  // ==========================================
+  // CHECKING STATE — Verifying link
+  // ==========================================
+  if (sessionStatus === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 relative">
+            <div className="absolute inset-0 bg-indigo-200 rounded-full animate-ping"></div>
+            <div className="relative w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+              <svg className="w-8 h-8 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-slate-700 mb-2">Verifying your link...</h2>
+          <p className="text-slate-500 text-sm">Please wait while we validate your recovery session</p>
+          <div className="flex justify-center gap-2 mt-6">
+            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // ERROR STATE — Invalid/expired link
+  // ==========================================
+  if (sessionStatus === 'error' && !isSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 px-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-red-100 p-8 text-center">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 mb-3">Invalid or Expired Link</h1>
+          <p className="text-slate-500 text-sm leading-relaxed mb-8">
+            The password reset link you used is no longer valid. It may have expired or already been used.
+          </p>
+          <div className="space-y-3">
+            <Link
+              href="/company/forgotpassword"
+              className="block w-full py-3.5 bg-gradient-to-r from-red-500 to-orange-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all"
+            >
+              Request New Reset Link
+            </Link>
+            <Link
+              href="/company/login"
+              className="block w-full py-3.5 bg-slate-100 text-slate-600 font-semibold rounded-xl hover:bg-slate-200 transition-all"
+            >
+              Back to Login
+            </Link>
+          </div>
+          <p className="text-xs text-slate-400 mt-6">
+            ⚠️ Security: Reset links expire after 1 hour for your protection
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MAIN RENDER — form or success
+  // ==========================================
   return (
     <div className="min-h-screen flex font-sans">
 
       {/* Left Side - Decorative */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 relative overflow-hidden justify-center items-center">
 
-        {/* Animated Background Blobs */}
         <div className="absolute top-10 left-10 w-72 h-72 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
         <div className="absolute top-32 right-10 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
         <div className="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
 
-        {/* Content */}
         <div className="relative z-10 text-center text-white p-8">
           <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl">
             <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,7 +280,6 @@ function ResetPasswordContent() {
             Your new password should be unique and secure. Make sure it's something you'll remember!
           </p>
 
-          {/* Security Tips */}
           <div className="mt-10 space-y-3 text-left max-w-sm mx-auto">
             <div className="flex items-center gap-3 text-sm">
               <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center shrink-0">
@@ -149,7 +306,6 @@ function ResetPasswordContent() {
       {/* Right Side - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-slate-50 p-6 overflow-y-auto relative">
 
-        {/* Back Button */}
         <Link href="/company/login" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group z-20">
           <svg className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
           Back to Login
@@ -159,7 +315,6 @@ function ResetPasswordContent() {
 
           {!isSuccess ? (
             <>
-              {/* Header */}
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-2xl mb-4">
                   <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,12 +323,18 @@ function ResetPasswordContent() {
                 </div>
                 <h2 className="text-3xl font-bold text-gray-900">Reset Password</h2>
                 <p className="text-gray-500 mt-2">Enter your new secure password below</p>
+
+                {/* Verified badge */}
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-xs text-emerald-700 font-medium mt-3">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Recovery link verified ✓
+                </div>
               </div>
 
-              {/* Form Card */}
               <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100">
 
-                {/* Error Message */}
                 {error && (
                   <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 animate-fade-in">
                     <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +349,6 @@ function ResetPasswordContent() {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
 
-                  {/* New Password Input */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
                     <div className="relative">
@@ -206,12 +366,10 @@ function ResetPasswordContent() {
                         disabled={isLoading}
                       />
 
-                      {/* Key Icon */}
                       <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                       </svg>
 
-                      {/* Show/Hide Toggle */}
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -225,7 +383,6 @@ function ResetPasswordContent() {
                       </button>
                     </div>
 
-                    {/* Password Strength Indicator */}
                     {password && (
                       <div className="mt-3 space-y-1.5 animate-fade-in">
                         <div className="flex items-center justify-between text-xs">
@@ -242,7 +399,6 @@ function ResetPasswordContent() {
                     )}
                   </div>
 
-                  {/* Confirm Password Input */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
                     <div className="relative">
@@ -260,12 +416,10 @@ function ResetPasswordContent() {
                         disabled={isLoading}
                       />
 
-                      {/* Lock Icon */}
                       <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
 
-                      {/* Show/Hide Toggle */}
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -279,7 +433,6 @@ function ResetPasswordContent() {
                       </button>
                     </div>
 
-                    {/* Match Indicator */}
                     {confirmPassword && (
                       <div className={`mt-2 flex items-center gap-2 text-xs animate-fade-in ${confirmPassword === password ? 'text-green-600' : 'text-red-600'}`}>
                         {confirmPassword === password ? (
@@ -297,7 +450,6 @@ function ResetPasswordContent() {
                     )}
                   </div>
 
-                  {/* Submit Button */}
                   <button
                     type="submit"
                     disabled={isLoading || !password || !confirmPassword || password !== confirmPassword}
@@ -323,7 +475,6 @@ function ResetPasswordContent() {
                 </form>
               </div>
 
-              {/* Sign In Link */}
               <p className="text-center text-gray-600 text-sm">
                 Remember your password?{' '}
                 <Link href="/company/login" className="font-semibold text-indigo-600 hover:underline">
@@ -335,15 +486,13 @@ function ResetPasswordContent() {
             /* Success State */
             <div className="bg-white p-8 rounded-3xl shadow-2xl shadow-gray-200/40 border border-gray-100 text-center animate-scale-in">
 
-              {/* Animated Success Icon */}
               <div className="relative inline-block mb-6">
                 <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-green-500/30">
-                  <svg className="w-12 h-12 text-white animate-checkmark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
 
-                {/* Confetti Rings */}
                 <div className="absolute inset-0 animate-ping-once">
                   <div className="w-28 h-28 border-4 border-green-300 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-30"></div>
                 </div>
@@ -353,7 +502,6 @@ function ResetPasswordContent() {
               <p className="text-gray-500 mb-2 text-lg">Your password has been successfully changed.</p>
               <p className="text-gray-400 text-sm mb-8">Redirecting to login in <span className="font-semibold text-indigo-600">3 seconds...</span></p>
 
-              {/* Feature List */}
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 mb-8 text-left space-y-3">
                 <div className="flex items-center gap-3 text-sm text-green-800">
                   <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shrink-0">
@@ -375,7 +523,6 @@ function ResetPasswordContent() {
                 </div>
               </div>
 
-              {/* Manual Redirect Button */}
               <Link
                 href="/company/login"
                 className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all text-lg"
@@ -390,7 +537,6 @@ function ResetPasswordContent() {
         </div>
       </div>
 
-      {/* Custom Animations */}
       <style jsx global>{`
         @keyframes blob {
           0% { transform: translate(0px, 0px) scale(1); }
@@ -413,19 +559,6 @@ function ResetPasswordContent() {
           to { opacity: 1; transform: scale(1); }
         }
         .animate-scale-in { animation: scale-in 0.5s ease-out; }
-
-        @keyframes checkmark {
-          0% { stroke-dasharray: 0 100; }
-          100% { stroke-dasharray: 100 100; }
-        }
-        .animate-checkmark {
-          stroke-dasharray: 100;
-          stroke-dashoffset: 100;
-          animation: draw-check 0.6s ease-out 0.3s forwards;
-        }
-        @keyframes draw-check {
-          to { stroke-dashoffset: 0; }
-        }
 
         @keyframes ping-once {
           0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }

@@ -290,7 +290,10 @@ const handleRegister = async (e: React.FormEvent) => {
 
     setStatusMessage('All files uploaded! Creating account...');
 
-    // STEP 1: AUTH SIGN UP
+      // STEP 1: AUTH SIGN UP — store ALL company data in metadata
+    // The database trigger (handle_new_user) will automatically create
+    // BOTH the profile row AND the companies row from this metadata.
+    // No manual INSERTs needed → no RLS issues.
     setCurrentStep('creating');
     setUploadProgress(85);
     setStatusMessage('Creating authentication credentials...');
@@ -299,11 +302,24 @@ const handleRegister = async (e: React.FormEvent) => {
       email,
       password,
       options: {
-        data: { role: 'company', status: 'pending' },
+        data: {
+          role: 'company',
+          status: 'pending',
+          company_name: companyName,
+          contact_person: contactPerson || companyName,
+          phone_number: phoneNumber || '',
+          office_address: formData.officeAddress || '',
+          permit_url: permitUrl,
+          sec_dti_url: secDtiUrl,
+          bir_2303_url: bir2303Url,
+          industry: formData.industry.trim() || 'General',
+          latitude: formData.latitude ? String(formData.latitude) : '',
+          longitude: formData.longitude ? String(formData.longitude) : '',
+        },
       },
     });
 
-    setUploadProgress(90);
+    setUploadProgress(95);
 
     if (authError) {
       if (authError.message.includes('already registered')) {
@@ -314,51 +330,24 @@ const handleRegister = async (e: React.FormEvent) => {
 
     if (!authData.user) throw new Error('User creation failed.');
 
-    // STEP 2: PROFILE UPSERT
-    setCurrentStep('profiling');
-    setUploadProgress(92);
-    setStatusMessage('Saving profile...');
+    // ✅ The trigger automatically created:
+    //   1. profiles row (with role='company')
+    //   2. companies row (with all the data from metadata)
+    // No manual INSERTs needed!
 
-    const { data: newProfile, error: profileError } = await supabase
-      .from('profiles')
-      .upsert(
-        [{ 
-          id: authData.user.id,                    
-          full_name: contactPerson || companyName, 
-          role: 'company',                         
-          email: email,                            
-          status: 'pending',                       
-        }],
-        { onConflict: 'id', ignoreDuplicates: false }
-      )
-      .select()
-      .single();
+    setUploadProgress(100);
+    setCurrentStep('success');
 
-    if (profileError) throw new Error(`Profile operation failed: ${profileError.message}`);
-    
-    setUploadProgress(95);
-    setStatusMessage('Saving company details...');
+    // ✅ Check if email confirmation is needed
+    if (authData.user && !authData.session) {
+      // Email confirmation enabled — show verification screen
+      alert(`🎉 Company Registration Submitted!\n\nCompany: ${companyName}\nIndustry: ${formData.industry || 'General'}\n\n📧 Please check your email (${email}) to verify your account.\nAfter verifying, an admin will review your documents.\n\nRedirecting to login...`);
+    } else {
+      // Email confirmation disabled — auto-confirmed
+      alert(`🎉 Company Registration Complete!\n\nCompany: ${companyName}\nIndustry: ${formData.industry || 'General'}\n\n⏳ Verification: 24-48 hours\n\nRedirecting to login...`);
+    }
 
-   // STEP 3: INSERT INTO COMPANIES TABLE
-   // 🔥 INDUSTRY IS OPTIONAL - Falls back to 'General' if empty
-    const { error: companyError } = await supabase
-      .from('companies')
-      .insert([{
-        user_id: newProfile.id, 
-        company_name: companyName,
-        contact_person: contactPerson,
-        office_address: formData.officeAddress, 
-        phone_number: phoneNumber,
-        email: email,
-        permit_url: permitUrl,
-        sec_dti_url: secDtiUrl,
-        bir_2303_url: bir2303Url,
-        industry: formData.industry.trim() || 'General', // 🔥 OPTIONAL FIELD FIX
-        location: { lat: formData.latitude || 10.7572, lng: formData.longitude || 122.9814 },
-        status: 'pending',
-      }]);
-
-    if (companyError) throw new Error(companyError.message);
+    setTimeout(() => window.location.href = '/company/login', 2500);
 
     setUploadProgress(100);
     setCurrentStep('success');

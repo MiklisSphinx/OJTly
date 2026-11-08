@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
-export function createMiddlewareClient(request: NextRequest) {
+export function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: { headers: request.headers }
   })
@@ -56,7 +56,7 @@ const isCompanyDashboard = (url: string) => url.startsWith('/company_')
 const isStudentDashboard = (url: string) =>
   url.startsWith('/student_') ||
   url === '/studentai' ||
-  url === '/map' // ✅ IMPORTANT: keep map included
+  url === '/map' 
 
 const isAdminDashboard = (url: string) => url.startsWith('/admin_')
 
@@ -74,109 +74,121 @@ const isAdminArea = (url: string) =>
 // =========================
 
 export async function middleware(request: NextRequest) {
-  const { supabase, response } = createMiddlewareClient(request)
+  
+  // 🔥 FIX: Wrap everything in try/catch so it NEVER returns undefined on a crash
+  try {
+    const { supabase, response } = proxy(request)
 
-  const url = request.nextUrl.pathname
+    const url = request.nextUrl.pathname
 
-  // 🔥 ALWAYS use getUser (most stable in SSR middleware)
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
 
-  // =========================
-  // PUBLIC ROUTES
-  // =========================
+    // =========================
+    // PUBLIC ROUTES
+    // =========================
 
-  const isRoot = url === '/'
+    const isRoot = url === '/'
 
-  const isGenericAuth =
-    url.startsWith('/login') ||
-    url.startsWith('/auth/callback') ||
-    url.startsWith('/auth/')
+    const isGenericAuth =
+      url.startsWith('/login') ||
+      url.startsWith('/auth/callback') ||
+      url.startsWith('/auth/')
 
-  const isAuthPath =
-    isCompanyAuth(url) ||
-    isStudentAuth(url) ||
-    isAdminAuth(url)
+    const isAuthPath =
+      isCompanyAuth(url) ||
+      isStudentAuth(url) ||
+      isAdminAuth(url)
 
-  const isStaticFile = /\.(jpg|jpeg|png|gif|svg|ico|json)$/.test(url)
+    const isStaticFile = /\.(jpg|jpeg|png|gif|svg|ico|json)$/.test(url)
 
-  const isPublic =
-    isRoot || isGenericAuth || isAuthPath || isStaticFile
+       // /verify is public — anyone can scan a QR code and verify a certificate
+    // without logging in
+    const isVerifyRoute = url.startsWith('/verify')
 
-  if (isPublic) return response
+    const isPublic =
+      isRoot || isGenericAuth || isAuthPath || isStaticFile || isVerifyRoute
+    if (isPublic) return response
 
-  // =========================
-  // NO USER → LOGIN REDIRECT
-  // =========================
+    // =========================
+    // NO USER → LOGIN REDIRECT
+    // =========================
 
-  if (!user) {
-    let loginUrl = '/student/login'
+    if (!user) {
+      let loginUrl = '/student/login'
 
-    if (isCompanyArea(url)) loginUrl = '/company/login'
-    else if (isAdminArea(url)) loginUrl = '/admin/login'
+      if (isCompanyArea(url)) loginUrl = '/company/login'
+      else if (isAdminArea(url)) loginUrl = '/admin/login'
 
-    return NextResponse.redirect(new URL(loginUrl, request.url))
-  }
-
-  // =========================
-  // GET ROLE
-  // =========================
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  const userRole = profile?.role?.toLowerCase()
-
-  // =========================
-  // ADMIN RULES
-  // =========================
-
-  if (userRole === 'admin') {
-    if (!isAdminDashboard(url)) {
-      return NextResponse.redirect(
-        new URL('/admin_main', request.url)
-      )
+      return NextResponse.redirect(new URL(loginUrl, request.url))
     }
-    return response
-  }
 
-  // =========================
-  // COMPANY RULES
-  // =========================
+    // =========================
+    // GET ROLE
+    // =========================
 
-  if (userRole === 'company') {
-    if (!isCompanyDashboard(url)) {
-      return NextResponse.redirect(
-        new URL('/company_main', request.url)
-      )
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const userRole = profile?.role?.toLowerCase()
+
+    // =========================
+    // ADMIN RULES
+    // =========================
+
+    if (userRole === 'admin') {
+      if (!isAdminDashboard(url)) {
+        return NextResponse.redirect(
+          new URL('/admin_main', request.url)
+        )
+      }
+      return response
     }
-    return response
-  }
 
-  // =========================
-  // STUDENT RULES
-  // =========================
+    // =========================
+    // COMPANY RULES
+    // =========================
 
-  if (userRole === 'student' || userRole === 'user') {
-    if (!isStudentDashboard(url)) {
-      return NextResponse.redirect(
-        new URL('/student_main', request.url)
-      )
+    if (userRole === 'company') {
+      if (!isCompanyDashboard(url)) {
+        return NextResponse.redirect(
+          new URL('/company_main', request.url)
+        )
+      }
+      return response
     }
-    return response
+
+    // =========================
+    // STUDENT RULES
+    // =========================
+
+    if (userRole === 'student' || userRole === 'user') {
+      if (!isStudentDashboard(url)) {
+        return NextResponse.redirect(
+          new URL('/student_main', request.url)
+        )
+      }
+      return response
+    }
+
+    // =========================
+    // FALLBACK
+    // =========================
+    return NextResponse.redirect(new URL('/student/login', request.url));
+
+  } catch (error) {
+    // If Supabase is down or env variables are missing, the code above will crash.
+    // This catch block ensures we STILL return a valid NextResponse.
+    console.error("❌ Middleware Crash:", error);
+    
+    // Allow the request to continue so the page can load (even if unprotected) 
+    // rather than crashing the whole app with an "Expected Response" error.
+    return NextResponse.next();
   }
-
-  // =========================
-  // FALLBACK
-  // =========================
-
-  return NextResponse.redirect(
-    new URL('/student/login', request.url)
-  )
 }
 
 export const config = {

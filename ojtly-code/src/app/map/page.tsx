@@ -1,9 +1,11 @@
 'use client';
-
+export const dynamic = 'force-dynamic';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import NotificationBell from '@/components/NotificationBell';
+import ChatPanel from '@/components/ChatPanel';
 
 interface OJTPost {
   id: string;
@@ -127,10 +129,32 @@ const ROUTE_STYLES: Record<TravelMode, { color: string; weight: number; dash: st
   car: { color: '#ef4444', weight: 6, dash: '' }
 };
 const TILE_LAYERS: Record<MapStyle, { url: string; attribution: string; options: Record<string, unknown> }> = {
-  light: { url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attribution: '&copy; OSM &copy; CARTO', options: { maxZoom: 20, subdomains: 'abcd' } },
-  satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '&copy; Esri', options: { maxZoom: 19 } }
+  light: {
+    // Esri World Street Map — English labels, free, no API key required
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, HERE, Garmin, USGS, NGA',
+    options: {
+      maxZoom: 19,
+      minZoom: 3,
+      noWrap: true,
+      updateWhenIdle: false,
+      keepAhead: 2,
+  
+    },
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+    options: {
+      maxZoom: 19,
+      minZoom: 3,
+      noWrap: true,
+      updateWhenIdle: false,
+      keepAhead: 2,
+      attribution: '&copy; Esri',
+    },
+  },
 };
-
 // ==========================================
 // ✅ STATUS HELPERS
 // ==========================================
@@ -143,6 +167,8 @@ const getStatusStyle = (status: string | undefined): string => {
     case 'rejected':
     case 'declined':
       return 'bg-red-100 text-red-700 border-red-200';
+    case 'completed':
+      return 'bg-blue-100 text-blue-700 border-blue-200';
     case 'pending':
     case 'under review':
     default:
@@ -164,6 +190,8 @@ const getStatusDotColor = (status: string | undefined): string => {
     case 'rejected':
     case 'declined':
       return 'bg-red-500';
+    case 'completed':
+      return 'bg-blue-500';
     default:
       return 'bg-amber-500';
   }
@@ -171,22 +199,89 @@ const getStatusDotColor = (status: string | undefined): string => {
 
 function createStudentMarkerSVG(isTracking: boolean = false): string {
   const c = isTracking ? '#10b981' : '#3b82f6';
-  return `<svg width="44" height="56" viewBox="0 0 44 56" xmlns="http://www.w3.org/2000/svg"><defs><filter id="sg" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><radialGradient id="sp" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="${c}" stop-opacity="${isTracking ? '0.5' : '0.35'}"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/></radialGradient></defs><circle cx="22" cy="22" r="20" fill="url(#sp)"><animate attributeName="r" values="14;${isTracking ? '28' : '26'};14" dur="${isTracking ? '1.5' : '2'}s" repeatCount="indefinite"/><animate attributeName="opacity" values="${isTracking ? '0.7' : '0.6'};0;${isTracking ? '0.7' : '0.6'}" dur="${isTracking ? '1.5' : '2'}s" repeatCount="indefinite"/></circle><circle cx="22" cy="22" r="16" fill="${c}" stroke="#fff" strokeWidth="3" filter="url(#sg)"/><g transform="translate(22,19)"><circle cx="0" cy="-4" r="4" fill="#fff"/><path d="M-7 9Q-7 1 0 1Q7 1 7 9L7 11-7 11Z" fill="#fff"/></g><path d="M22 38L28 53C28 55 16 55 16 53Z" fill="${c}" stroke="#fff" strokeWidth="2.5" strokeLinejoin="round"/>${isTracking ? `<g transform="translate(30,8)"><circle cx="6" cy="6" r="8" fill="#10b981" stroke="#fff" strokeWidth="2"/><path d="M6 3L6 9M3 6L9 6" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></g>` : ''}</svg>`;
+  // Pure circular marker with person icon. NO triangle tail.
+  return `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <filter id="sg" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="rgba(0,0,0,0.35)" flood-opacity="0.6"/>
+      </filter>
+      <radialGradient id="sp" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="${c}" stop-opacity="${isTracking ? '0.55' : '0.35'}"/>
+        <stop offset="70%" stop-color="${c}" stop-opacity="0.08"/>
+        <stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle cx="20" cy="20" r="18" fill="url(#sp)">
+      <animate attributeName="r" values="14;${isTracking ? '19' : '18'};14" dur="${isTracking ? '1.5s' : '2s'}" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="${isTracking ? '0.85' : '0.7'};0;${isTracking ? '0.85' : '0.7'}" dur="${isTracking ? '1.5s' : '2s'}" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="20" cy="20" r="11" fill="${c}" stroke="#fff" strokeWidth="3" filter="url(#sg)"/>
+    <g transform="translate(20,20)" fill="#fff">
+      <circle cx="0" cy="-2.5" r="2.6"/>
+      <path d="M-4.2 5.2 Q-4.2 0.4 0 0.4 Q4.2 0.4 4.2 5.2 L4.2 6.4 -4.2 6.4 Z"/>
+    </g>
+    ${isTracking ? `
+      <g transform="translate(28,11)">
+        <circle cx="6" cy="6" r="6.5" fill="#10b981" stroke="#fff" stroke-width="2"/>
+        <path d="M6 3.2L6 8.8M3.2 6L8.8 6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+      </g>` : ''}
+  </svg>`;
 }
 
 function createCompanyMarkerSVG(initial: string, score: number, isSelected: boolean, hasApplication?: string | null): string {
   const colors = getMarkerColor(score);
   const size = isSelected ? 44 : getMarkerSize(score, false);
-  const fs = isSelected ? 18 : score >= 70 ? 14 : 12;
+  const fs = isSelected ? 17 : score >= 70 ? 13 : 11;
+  const w = size;
+  const h = size + 14; // total height (circle + tail) — matches iconSize in Leaflet
+  const cx = size / 2; // horizontal center of the circle
+  const cy = size / 2; // vertical center of the circle
+  
+  // Status dot — scaled to marker size, positioned INSIDE the viewBox (no overflow)
+  const dotR = Math.max(3.5, size * 0.17);
+  const dotCx = size - dotR - 0.5;
+  const dotCy = dotR + 0.5;
+  
   let statusDot = '';
   if (hasApplication) {
     const normalized = hasApplication.toLowerCase();
     let dotColor = '#f59e0b';
     if (normalized === 'accepted' || normalized === 'approved') dotColor = '#10b981';
     else if (normalized === 'rejected' || normalized === 'declined') dotColor = '#ef4444';
-    statusDot = `<circle cx="${size - 2}" cy="6" r="6" fill="${dotColor}" stroke="#fff" stroke-width="2"/>`;
+    else if (normalized === 'completed') dotColor = '#3b82f6';
+    statusDot = `<circle cx="${dotCx}" cy="${dotCy}" r="${dotR}" fill="${dotColor}" stroke="#fff" stroke-width="2"/>`;
   }
-  return `<svg width="${size}" height="${size + 14}" viewBox="0 0 ${size} ${size + 14}" xmlns="http://www.w3.org/2000/svg"><defs><filter id="cs-${score}-${isSelected}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="${colors.shadow}" flood-opacity="0.6"/></filter><linearGradient id="cg-${score}-${isSelected}" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="${colors.bg}"/><stop offset="100%" stop-color="${colors.border}"/></linearGradient></defs>${isSelected ? `<ellipse cx="${size / 2}" cy="${size / 2 + 2}" rx="${size / 2 + 4}" ry="${size / 2 + 6}" fill="${colors.shadow}" opacity="0.3"><animate attributeName="rx" values="${size / 2 + 4};${size / 2 + 6};${size / 2 + 4}" dur="2s" repeatCount="indefinite"/></ellipse>` : ''}<path d="M${size / 2} ${size + 14}L${size + 4} ${size / 2 + 4}Q${size + 4} 4 ${size / 2} 4Q0 4 0 ${size / 2 + 4}Z" fill="url(#cg-${score}-${isSelected})" stroke="${isSelected ? '#fff' : colors.border}" strokeWidth="${isSelected ? 3 : 2}" filter="url(#cs-${score}-${isSelected})"/><text x="${size / 2}" y="${size / 2 + 6}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-family="system-ui,sans-serif" font-weight="${isSelected ? '800' : '700'}" font-size="${fs}">${initial.toUpperCase()}</text>${isSelected ? `<circle cx="${size - 2}" cy="6" r="8" fill="${colors.bg}" stroke="#fff" stroke-width="2"><animate attributeName="r" values="8;10;8" dur="1.5s" repeatCount="indefinite"/></circle><text x="${size - 2}" y="7" text-anchor="middle" dominant-baseline="middle" fill="#fff" fontWeight="900" font-size="9">★</text>` : statusDot}</svg>`;
+  
+  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <filter id="cs-${score}-${isSelected}" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="${colors.shadow}" flood-opacity="0.7"/>
+      </filter>
+      <linearGradient id="cg-${score}-${isSelected}" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="${colors.bg}"/>
+        <stop offset="100%" stop-color="${colors.border}"/>
+      </linearGradient>
+    </defs>
+    ${isSelected ? `<circle cx="${cx}" cy="${cy}" r="${cx + 2}" fill="${colors.bg}" opacity="0.2"/>` : ''}
+    <path d="M${cx} ${h} L ${w - 0.5} ${cy + 1} Q ${w - 0.5} 1 ${cx} 1 Q 0.5 1 0.5 ${cy + 1} Z"
+          fill="url(#cg-${score}-${isSelected})"
+          stroke="${isSelected ? '#fff' : colors.border}"
+          stroke-width="${isSelected ? 2.5 : 1.5}"
+          stroke-linejoin="round"
+          filter="url(#cs-${score}-${isSelected})"/>
+    <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
+          fill="#fff" font-family="system-ui,sans-serif"
+          font-weight="${isSelected ? '800' : '700'}" font-size="${fs}">
+      ${initial.toUpperCase()}
+    </text>
+    ${statusDot}
+    ${isSelected ? `
+      <circle cx="${dotCx}" cy="${dotCy}" r="${dotR}" fill="${colors.bg}" stroke="#fff" stroke-width="2">
+        <animate attributeName="r" values="${dotR};${dotR + 1.5};${dotR}" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
+      <text x="${dotCx}" y="${dotCy}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-weight="900" font-size="${dotR + 0.5}">★</text>
+    ` : ''}
+  </svg>`;
 }
 
 const CheckCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -236,13 +331,15 @@ interface MapComponentProps {
   hasActiveOJT?: boolean;
   activeOJTCompanyId?: string;
   activeOJTPostId?: string;
+  onLocationUpdate?: (loc: { lat: number; lng: number }) => void;
 }
 
 function MapComponent({
   posts, selectedPostId, studentLocation, studentSkills, studentCourse, userId,
   travelMode, onPostSelect, showDirections, targetPost,
   mapStyle, isTracking, onRecenter, gpsAccuracy, fitBoundsTrigger = 0,
-  applicationStatuses, hasActiveOJT, activeOJTCompanyId, activeOJTPostId
+  applicationStatuses, hasActiveOJT, activeOJTCompanyId, activeOJTPostId,
+  onLocationUpdate
 }: MapComponentProps): React.ReactElement {
   const [L, setL] = useState<unknown>(null);
   const [loaded, setLoaded] = useState(false);
@@ -253,6 +350,7 @@ function MapComponent({
   const routeLineRef = useRef<unknown>(null);
   const lightLayerRef = useRef<unknown>(null);
   const satelliteLayerRef = useRef<unknown>(null);
+  const labelsLayerRef = useRef<unknown>(null); // English country/city names overlay for satellite
   const prevPosRef = useRef<{ lat: number; lng: number }>(studentLocation);
   const animationFrameRef = useRef<number | null>(null);
   const prevFitRef = useRef<number>(0);
@@ -276,6 +374,7 @@ function MapComponent({
       let badgeBg = '#fef3c7', badgeColor = '#92400e', badgeBorder = '#fcd34d', label = getStatusLabel(appStatus);
       if (normalized === 'accepted' || normalized === 'approved') { badgeBg = '#d1fae5'; badgeColor = '#065f46'; badgeBorder = '#6ee7b7'; label = '✅ ' + label; }
       else if (normalized === 'rejected' || normalized === 'declined') { badgeBg = '#fee2e2'; badgeColor = '#991b1b'; badgeBorder = '#fca5a5'; label = '❌ ' + label; }
+      else if (normalized === 'completed') { badgeBg = '#dbeafe'; badgeColor = '#1e40af'; badgeBorder = '#93c5fd'; label = '🎓 OJT Completed'; }
       else { label = '⏳ ' + label; }
       statusBadge = `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:${badgeBg};padding:4px 10px;border-radius:20px;border:1px solid ${badgeBorder};"><span style="color:${badgeColor};font-size:11px;font-weight:700;">${label}</span></div>`;
     }
@@ -301,10 +400,34 @@ function MapComponent({
   useEffect(() => {
     const La = L as any;
     if (!containerRef.current || mapRef.current || !La || typeof window === 'undefined') return;
-    const map = La.map(containerRef.current, { center: [studentLocation.lat, studentLocation.lng], zoom: 14, zoomControl: false, attributionControl: false, preferCanvas: true });
+    const map = La.map(containerRef.current, {
+      center: [studentLocation.lat, studentLocation.lng],
+      zoom: 14,
+      minZoom: 3,
+      maxZoom: 19,
+      maxBounds: [[-90, -180], [90, 180]],
+      maxBoundsViscosity: 1.0,
+      zoomControl: false,
+      attributionControl: true,
+      preferCanvas: true,
+      worldCopyJump: false,
+    });
     lightLayerRef.current = La.tileLayer(TILE_LAYERS.light.url, { ...TILE_LAYERS.light.options }).addTo(map);
     satelliteLayerRef.current = La.tileLayer(TILE_LAYERS.satellite.url, { ...TILE_LAYERS.satellite.options });
+    // English country/city names overlay — shown only on satellite mode
+    labelsLayerRef.current = La.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 19,
+        minZoom: 3,
+        noWrap: true,
+        opacity: 1.0,
+        updateWhenIdle: false,
+        keepAhead: 2,
+      }
+    );
     La.control.zoom({ position: 'bottomleft' }).addTo(map);
+    La.control.attribution({ position: 'bottomright', prefix: false }).addTo(map);
     mapRef.current = map;
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -315,6 +438,7 @@ function MapComponent({
       if (routeLineRef.current) { ma.removeLayer(routeLineRef.current); routeLineRef.current = null; }
       if (lightLayerRef.current) ma.removeLayer(lightLayerRef.current);
       if (satelliteLayerRef.current) ma.removeLayer(satelliteLayerRef.current);
+      if (labelsLayerRef.current) ma.removeLayer(labelsLayerRef.current);
       ma.remove(); mapRef.current = null;
     };
   }, [L]);
@@ -334,13 +458,17 @@ function MapComponent({
 
   useEffect(() => {
     const map = mapRef.current as any;
-    if (!map || !lightLayerRef.current || !satelliteLayerRef.current) return;
+    if (!map || !lightLayerRef.current || !satelliteLayerRef.current || !labelsLayerRef.current) return;
     if (mapStyle === 'satellite') {
+      // Satellite imagery + English country/city labels overlaid on top
       if (!map.hasLayer(satelliteLayerRef.current)) map.addLayer(satelliteLayerRef.current);
+      if (!map.hasLayer(labelsLayerRef.current)) map.addLayer(labelsLayerRef.current);
       if (map.hasLayer(lightLayerRef.current)) map.removeLayer(lightLayerRef.current);
     } else {
+      // Light mode (Esri World Street Map) already has English labels baked in
       if (!map.hasLayer(lightLayerRef.current)) map.addLayer(lightLayerRef.current);
       if (map.hasLayer(satelliteLayerRef.current)) map.removeLayer(satelliteLayerRef.current);
+      if (map.hasLayer(labelsLayerRef.current)) map.removeLayer(labelsLayerRef.current);
     }
   }, [mapStyle]);
 
@@ -349,11 +477,20 @@ function MapComponent({
     if (!map || !La || typeof window === 'undefined') return;
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     const newPos = studentLocation;
-    if (!studentMarkerRef.current) {
+        if (!studentMarkerRef.current) {
       studentMarkerRef.current = La.marker([newPos.lat, newPos.lng], {
         icon: La.divIcon({ html: createStudentMarkerSVG(isTracking), className: 'student-marker-animated', iconSize: [44, 56], iconAnchor: [22, 56], popupAnchor: [0, -48] }),
-        zIndexOffset: 9999
-      }).bindPopup(`<div style="font-family:system-ui,sans-serif;padding:8px;text-align:center;min-width:120px;"><strong style="color:#1e40af;font-size:12px;">${isTracking ? '📍 Tracking Active' : 'Your Location'}</strong><br/><span style="color:#6b7280;font-size:10px;">${newPos.lat.toFixed(4)}, ${newPos.lng.toFixed(4)}</span></div>`, { closeButton: false, className: 'custom-popup', maxWidth: 180 }).addTo(map);
+        zIndexOffset: 9999,
+        draggable: true,
+        autoPan: true,
+      })
+        .bindPopup(`<div style="font-family:system-ui,sans-serif;padding:8px;text-align:center;min-width:120px;"><strong style="color:#1e40af;font-size:12px;">${isTracking ? '📍 Tracking Active' : 'Your Location'}</strong><br/><span style="color:#6b7280;font-size:10px;">${newPos.lat.toFixed(4)}, ${newPos.lng.toFixed(4)}</span><br/><span style="color:#94a3b8;font-size:9px;">💡 Drag to fix if wrong</span></div>`, { closeButton: false, className: 'custom-popup', maxWidth: 180 })
+        .on('dragend', (e: any) => {
+          const ll = e.target.getLatLng();
+          prevPosRef.current = { lat: ll.lat, lng: ll.lng };
+          if (onLocationUpdate) onLocationUpdate({ lat: ll.lat, lng: ll.lng });
+        })
+        .addTo(map);
       prevPosRef.current = newPos;
     } else {
       const t0 = performance.now(), dur = 600, sLat = prevPosRef.current.lat, sLng = prevPosRef.current.lng;
@@ -422,7 +559,7 @@ function MapComponent({
         {isTracking && <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-30" />}
         <svg className={`w-5 h-5 ${isTracking ? 'text-white' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
       </button>
-      <div className="absolute bottom-1 left-10 z-[3999] text-[8px] text-slate-500/60 bg-white/50 backdrop-blur px-1.5 py-0.5 rounded hidden md:block">© {mapStyle === 'satellite' ? 'Esri' : 'CARTO'}</div>
+      <div className="absolute bottom-1 left-10 z-[3999] text-[8px] text-slate-500/60 bg-white/50 backdrop-blur px-1.5 py-0.5 rounded hidden md:block">© Esri</div>
     </div>
   );
 }
@@ -482,7 +619,7 @@ function ProfileOverlay({ profile, profileLoading, profileError, userId, isTrack
             <button type="button" onClick={onStopTracking} className="w-full py-3 rounded-xl text-sm font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]">⏹ Stop Tracking</button>
           )}
           {profile ? (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 rounded-2xl p-4 border border-blue-100">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50/5 rounded-2xl p-4 border border-blue-100">
               <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-3">Your Profile</p>
               <div className="flex items-center gap-3 mb-4">
                 {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-10 h-10 rounded-xl border-2 border-white shadow-md object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0">{initial}</div>}
@@ -516,8 +653,16 @@ function HeaderAvatar({ profile, profileLoading, userId }: { profile: StudentPro
   const initial = name.charAt(0).toUpperCase() || (!userId ? '→' : '?');
   const avatarUrl = profile?.avatar_url;
   if (profileLoading) return (<div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-blue-100 animate-pulse flex items-center justify-center border-2 border-blue-200"><div className="w-4 h-4 rounded-full bg-blue-300" /></div>);
-  if (profile && avatarUrl) return (<div className="w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden shadow-lg cursor-pointer hover:scale-105 transition-all border-2 border-white/80" title={name}><img src={avatarUrl} alt={name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLElement).parentElement!.innerHTML = `<span class="w-full h-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">${initial}</span>`; }} /></div>);
-  if (profile) return (<div className="w-8 h-8 md:w-9 md:h-9 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg cursor-pointer hover:scale-105 transition-all" title={name}>{initial}</div>);
+  if (profile && avatarUrl) return (
+    <Link href="/student_profile" className="block w-8 h-8 md:w-9 md:h-9 rounded-full overflow-hidden shadow-lg cursor-pointer hover:scale-105 transition-all border-2 border-white/80 sm:flex " title={`View ${name}'s profile`}>
+      <img src={avatarUrl} alt={name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLElement).parentElement!.innerHTML = `<span class="w-full h-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">${initial}</span>`; }} />
+    </Link>
+  );
+  if (profile) return (
+    <Link href="/student_profile" className="w-8 h-8 md:w-9 md:h-9 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg cursor-pointer hover:scale-105 transition-all" title={`View ${name}'s profile`}>
+      {initial}
+    </Link>
+  );
   if (userId) return (<div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-slate-200 animate-pulse flex items-center justify-center"><div className="w-4 h-4 rounded-full bg-slate-300" /></div>);
   return (<Link href="/student/login" className="w-8 h-8 md:w-9 md:h-9 bg-white/95 rounded-full flex items-center justify-center text-slate-500 hover:bg-white transition-all border border-slate-200 shadow-sm" title="Sign in"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" /></svg></Link>);
 }
@@ -568,6 +713,8 @@ export default function MapPage() {
   const [travelMode, setTravelMode] = useState<TravelMode>('motorcycle');
   const [isCardOpen, setIsCardOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [studentLoc, setStudentLoc] = useState({ lat: 10.6915, lng: 122.9538 });
   const [isLocating, setIsLocating] = useState(false);
@@ -584,6 +731,7 @@ export default function MapPage() {
   const [isApplying, setIsApplying] = useState(false);
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [showFullPanel, setShowFullPanel] = useState(false);
+  const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(false);
 
   const [applicationStatuses, setApplicationStatuses] = useState<Map<string, string>>(new Map());
   const [appStatus, setAppStatus] = useState<string | null>(null);
@@ -592,6 +740,52 @@ export default function MapPage() {
   const [activeOJTCompany, setActiveOJTCompany] = useState('');
   const [activeOJTPostId, setActiveOJTPostId] = useState('');
   const [activeOJTCompanyId, setActiveOJTCompanyId] = useState('');
+  const [showChat, setShowChat] = useState(false);
+  const [companyUserId, setCompanyUserId] = useState<string | null>(null);
+  const [chatUnread, setChatUnread] = useState(0);
+
+  // 💬 Resolve company's auth UID for chat
+  useEffect(() => {
+    if (hasActiveOJT && activeOJTCompanyId && !companyUserId) {
+      (async () => {
+        const { data: company } = await supabase
+          .from('companies')
+          .select('user_id')
+          .eq('id', activeOJTCompanyId)
+          .maybeSingle();
+        if (company?.user_id) setCompanyUserId(company.user_id);
+      })();
+    }
+  }, [hasActiveOJT, activeOJTCompanyId, companyUserId, supabase]);
+
+  // 💬 Chat unread badge — count + realtime
+  useEffect(() => {
+    if (!userId) return;
+    const fetchUnread = async () => {
+      try {
+        const { data: convs } = await supabase
+          .from('conversations')
+          .select('id')
+          .or(`participant_a.eq.${userId},participant_b.eq.${userId}`);
+        const convIds = (convs || []).map((c: any) => c.id);
+        if (convIds.length === 0) { setChatUnread(0); return; }
+        const { count } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .in('conversation_id', convIds)
+          .neq('sender_id', userId)
+          .eq('is_read', false);
+        setChatUnread(count || 0);
+      } catch (err) { console.error('💬 Unread count error:', err); }
+    };
+    fetchUnread();
+    const ch = supabase
+      .channel(`map-chat-unread:${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchUnread)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [userId, supabase]);
 
   const loadApplicationStatuses = useCallback(async (uid: string) => {
     try {
@@ -611,7 +805,9 @@ export default function MapPage() {
         setHasActiveOJT(foundActiveOJT);
         if (foundActiveOJT) {
           setActiveOJTPostId(activePostId);
-          const { data: activePost } = await supabase.from('ojt_posts').select('companies(id, company_name)').eq('id', activePostId).maybeSingle();
+          const { data: activePost } = await supabase.from('ojt_posts').select('companies(id, company_name)')        .eq('is_deleted', false)
+        .neq('status', 'taken_down').eq('id', activePostId).maybeSingle();
+          
           if (activePost && (activePost as any).companies?.company_name) {
             setActiveOJTCompany((activePost as any).companies.company_name);
             setActiveOJTCompanyId((activePost as any).companies?.id || '');
@@ -658,6 +854,13 @@ export default function MapPage() {
     if (normalizedStatus === 'rejected' || normalizedStatus === 'declined') {
       return { text: "Already Applied", color: "bg-gray-300 text-gray-600 border-2 border-gray-400 shadow-none cursor-not-allowed", disabled: true, icon: <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5" /> };
     }
+    if (normalizedStatus === 'completed') {
+      return { text: "OJT Completed", color: "bg-blue-100 text-blue-700 border-2 border-blue-300 shadow-none cursor-not-allowed", disabled: true, icon: <CheckCircleIcon className="w-4 h-4 sm:w-5 sm:h-5" /> };
+    }
+    // ✅ NEW: No slots available — disable Apply button
+    if (Number(selectedPost?.vacancies ?? 0) <= 0) {
+      return { text: "No Slots Available", color: "bg-red-50 text-red-600 border-2 border-red-200 shadow-none cursor-not-allowed", disabled: true, icon: <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" /> };
+    }
     return { text: "Apply Now", color: "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5", disabled: false, icon: <SendIcon className="w-4 h-4 sm:w-5 sm:h-5" /> };
   };
 
@@ -701,7 +904,8 @@ export default function MapPage() {
     (async () => {
       setPostsLoading(true);
       try {
-        const { data, error } = await supabase.from('ojt_posts').select('*, companies(id, company_name, logo_url)').eq('status', 'active');
+        const { data, error } = await supabase.from('ojt_posts').select('*, companies(id, company_name, logo_url)')        .eq('is_deleted', false)
+        .neq('status', 'taken_down').eq('status', 'active');
         if (error) { console.error('❌ Posts Error:', error); return; }
         setPosts((data as OJTPost[]) || []);
         setFitBoundsTrigger(prev => prev + 1);
@@ -731,7 +935,8 @@ export default function MapPage() {
             if (activeStatuses.includes(normalized)) {
               setHasActiveOJT(true);
               setActiveOJTPostId(app.post_id!);
-              supabase.from('ojt_posts').select('companies(id, company_name)').eq('id', app.post_id!).maybeSingle().then(({ data }: { data: any }) => {
+              supabase.from('ojt_posts').select('companies(id, company_name)')        .eq('is_deleted', false)
+        .neq('status', 'taken_down').eq('id', app.post_id!).maybeSingle().then(({ data }: { data: any }) => {
                 if (data && (data as any).companies) {
                   setActiveOJTCompany((data as any).companies.company_name || '');
                   setActiveOJTCompanyId((data as any).companies?.id || '');
@@ -755,24 +960,60 @@ export default function MapPage() {
     return () => { delete (window as unknown as Record<string, (() => void) | undefined>).seeMoreDetailsClicked; };
   }, []);
 
-  const detectLoc = useCallback(() => {
-    if (!navigator.geolocation) { setToast({ message: 'Geolocation is not supported', type: 'error' }); return; }
+   const detectLoc = useCallback(() => {
+    if (!navigator.geolocation) {
+      setToast({ message: 'Geolocation is not supported by this browser.', type: 'error' });
+      return;
+    }
+    console.log('📍 [detectLoc] Requesting GPS...');
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => { setStudentLoc({ lat: position.coords.latitude, lng: position.coords.longitude }); setGpsAccuracy(position.coords.accuracy); setIsLocating(false); setFitBoundsTrigger(prev => prev + 1); },
-      (error) => { setIsLocating(false); setToast({ message: error.message === 'User denied Geolocation' ? 'Location access denied.' : 'Failed to get location.', type: 'error' }); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      (position) => {
+        const newLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
+        console.log('✅ [detectLoc] GPS success:', newLoc, 'accuracy:', position.coords.accuracy);
+        setStudentLoc(newLoc);
+        setGpsAccuracy(position.coords.accuracy);
+        setIsLocating(false);
+        setFitBoundsTrigger(prev => prev + 1);
+        setToast({
+          message: `Located at ${newLoc.lat.toFixed(5)}, ${newLoc.lng.toFixed(5)} (±${Math.round(position.coords.accuracy)}m)`,
+          type: position.coords.accuracy > 100 ? 'warning' : 'success',
+        });
+      },
+      (error) => {
+        console.error('❌ [detectLoc] GPS error:', error.code, error.message);
+        setIsLocating(false);
+        const msgs: Record<number, string> = {
+          1: 'Permission denied. Click the 🔒 lock icon in the URL bar → Site settings → Allow Location, then refresh.',
+          2: 'Location unavailable. Your device may not have GPS, or the signal is blocked.',
+          3: 'Location request timed out. Try again or move near a window.',
+        };
+        setToast({ message: msgs[error.code] || error.message || 'Failed to get location.', type: 'error' });
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   }, []);
 
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) { setToast({ message: 'Geolocation is not supported', type: 'error' }); return; }
+    console.log('📡 [startTracking] Starting watch...');
     setIsLocating(true);
     if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => { setStudentLoc({ lat: position.coords.latitude, lng: position.coords.longitude }); setGpsAccuracy(position.coords.accuracy); setIsTracking(true); setIsLocating(false); },
-      (error) => { setIsTracking(false); setIsLocating(false); watchIdRef.current = null; setToast({ message: 'Tracking failed.', type: 'error' }); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      (position) => {
+        const newLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
+        console.log('📡 [watch] update:', newLoc);
+        setStudentLoc(newLoc);
+        setGpsAccuracy(position.coords.accuracy);
+        setIsTracking(true);
+        setIsLocating(false);
+      },
+      (error) => {
+        console.error('❌ [watch] error:', error.code, error.message);
+        setIsTracking(false); setIsLocating(false); watchIdRef.current = null;
+        setToast({ message: 'Tracking stopped: ' + (error.message || 'GPS lost'), type: 'error' });
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   }, []);
 
@@ -781,11 +1022,63 @@ export default function MapPage() {
     setIsTracking(false); setGpsAccuracy(undefined);
   }, []);
 
+  // ─── Force auto-detect on mount, with full diagnostics ───
+  useEffect(() => {
+    console.log('🚀 [mount] MapPage mounted, forcing GPS detect...');
+    // Always try, no matter what permission state is. The browser will prompt if needed.
+    detectLoc();
+
+    // Also check the permissions API for diagnostics
+    if ('permissions' in navigator) {
+      navigator.permissions.query({ name: 'geolocation' as PermissionName })
+        .then((status) => {
+          console.log('🔑 [perm] state:', status.state);
+          status.onchange = () => {
+            console.log('🔑 [perm] changed to:', status.state);
+            if (status.state === 'granted') detectLoc();
+          };
+        })
+        .catch(() => {});
+    }
+  }, [detectLoc]);
+
+  // ─── Auto-detect location on mount + surface permission problems ───
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('permissions' in navigator)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+        if (cancelled) return;
+        if (status.state === 'granted') {
+          detectLoc();
+        } else if (status.state === 'denied') {
+          setToast({
+            message: 'Location is blocked. Click the lock icon in the address bar → Site settings → Allow Location, then refresh.',
+            type: 'warning',
+          });
+        }
+        status.onchange = () => {
+          if (status.state === 'granted') detectLoc();
+        };
+      } catch {
+        detectLoc();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [detectLoc]);
+  
   const filteredPosts = useMemo(() => {
-    if (!searchQuery.trim()) return posts;
-    const q = searchQuery.toLowerCase();
-    return posts.filter(p => p.title?.toLowerCase().includes(q) || p.company_name?.toLowerCase().includes(q) || p.location_name?.toLowerCase().includes(q) || (p.companies?.company_name || '').toLowerCase().includes(q));
-  }, [posts, searchQuery]);
+    let result = posts;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => p.title?.toLowerCase().includes(q) || p.company_name?.toLowerCase().includes(q) || p.location_name?.toLowerCase().includes(q) || (p.companies?.company_name || '').toLowerCase().includes(q));
+    }
+    if (showSavedOnly) {
+      result = result.filter(p => savedPostIds.has(p.id));
+    }
+    return result;
+  }, [posts, searchQuery, showSavedOnly, savedPostIds]);
 
   const selectedPost = useMemo(() => {
     if (!selectedPostId) return null;
@@ -797,24 +1090,182 @@ export default function MapPage() {
     return { ...base, _distance: Math.round(dist * 10) / 10, _travelMins: Math.round((dist / speeds[travelMode]) * 60), _skillMatch: knn.skillMatch, _knnScore: knn.score, _courseMatch: knn.courseMatch };
   }, [selectedPostId, travelMode, studentLoc, posts, profile]);
 
+  // ==========================================
+  // 🔔 NOTIFY COMPANY OF NEW APPLICANT (Map version)
+  // Same helper as student_main_page.tsx — fires a notification row
+  // addressed to the company that owns the post, so their bell lights up.
+  // Uses profile.full_name if available (cached in component state).
+  // ==========================================
+  const notifyCompanyOfNewApplicant = useCallback(async ({ postId, studentId }: { postId: string; studentId: string }) => {
+    try {
+      // 1. Post title + company user_id + company_name in one joined query.
+      const { data: postInfo, error: postErr } = await supabase
+        .from('ojt_posts')
+        .select(`
+          title,
+          companies ( user_id, company_name )
+        `)
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postErr || !postInfo) {
+        console.warn('🔔 [Map] Could not load post/company for notification:', postErr);
+        return;
+      }
+
+      const company = Array.isArray((postInfo as any).companies)
+        ? (postInfo as any).companies[0]
+        : (postInfo as any).companies;
+      const companyUserId = company?.user_id;
+      const companyName = company?.company_name;
+      const postTitle = (postInfo as any).title || 'your OJT post';
+
+      if (!companyUserId) {
+        console.warn('🔔 [Map] Post has no company user_id; skipping notification.');
+        return;
+      }
+
+      // 2. Student name — use cached profile.full_name, else fetch from profiles.
+      let studentFullName = profile?.full_name || '';
+      if (!studentFullName) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', studentId)
+          .maybeSingle();
+        if (prof?.full_name) studentFullName = prof.full_name;
+      }
+      if (!studentFullName) studentFullName = 'A student';
+
+      // 3. INSERT notification addressed to the COMPANY user.
+      const title = `New applicant for "${postTitle}"`;
+      const message = `${studentFullName} applied for your OJT post${companyName ? ` at ${companyName}` : ''}.`;
+      const linkUrl = `/company_applicants?post_id=${postId}`;
+
+      // 🛡️ DUPLICATE GUARD: check if a notification with the SAME
+      //    user_id + link_url + message already exists. This prevents
+      //    double-notify if the helper fires twice (race condition,
+      //    React StrictMode double-invoke, or double-click).
+      const { data: existingNotif } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', companyUserId)
+        .eq('link_url', linkUrl)
+        .eq('message', message)
+        .maybeSingle();
+
+      if (existingNotif) {
+        console.log('🔔 [Map] Duplicate notification detected for post', postId, '— skipping');
+        return;
+      }
+
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: companyUserId,
+        title,
+        message,
+        is_read: false,
+        type: 'application_update',
+        link_url: linkUrl,
+        created_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+
+      if (notifErr) {
+        console.error('🔔 [Map] notifications INSERT failed:', JSON.stringify(notifErr, null, 2));
+      } else {
+        console.log('🔔 [Map] Company notified of new applicant for post', postId);
+      }
+    } catch (err) {
+      console.error('🔔 [Map] notifyCompanyOfNewApplicant crashed (non-fatal):', err);
+    }
+  }, [supabase, profile]);
+
+  // 🔖 SAVE / UNSAVE POST
+  const toggleSavePost = async (postId: string) => {
+    if (!userId) return;
+    const isSaved = savedPostIds.has(postId);
+    setSavedPostIds(prev => {
+      const next = new Set(prev);
+      if (isSaved) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+    try {
+      if (isSaved) {
+        await supabase.from('saved_posts').delete().eq('student_id', userId).eq('post_id', postId);
+      } else {
+        await supabase.from('saved_posts').insert({ student_id: userId, post_id: postId });
+      }
+    } catch (err) {
+      setSavedPostIds(prev => {
+        const next = new Set(prev);
+        if (isSaved) next.add(postId);
+        else next.delete(postId);
+        return next;
+      });
+    }
+  };
+
+  // Load saved posts
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      const { data } = await supabase.from('saved_posts').select('post_id').eq('student_id', userId);
+      if (data) setSavedPostIds(new Set(data.map((s: any) => s.post_id)));
+    })();
+  }, [userId, supabase]);
+
   const handleApply = useCallback(async () => {
     if (!selectedPostId || !selectedPost || !userId) return;
     const { data: { user: liveUser } } = await supabase.auth.getUser();
     if (!liveUser) { setToast({ message: 'Please log in to apply', type: 'error' }); return; }
     if (hasActiveOJT && activeOJTPostId !== selectedPostId) { setToast({ message: `You're currently enrolled at ${activeOJTCompany}. Complete it first or contact admin.`, type: 'warning' }); return; }
+    // ✅ NEW: Check if the post has available slots
+    if (Number(selectedPost?.vacancies ?? 0) <= 0) { setToast({ message: 'This position has no available slots', type: 'warning' }); return; }
     setApplyingPostId(selectedPostId);
     setIsApplying(true);
     try {
       const { data: existingApp, error: checkError } = await supabase.from('applications').select('status').eq('student_id', liveUser.id).eq('post_id', selectedPostId).maybeSingle();
       if (checkError) throw new Error('Failed to check existing application');
       if (existingApp) { setAppStatus(existingApp.status); setApplicationStatuses(prev => new Map(prev).set(selectedPostId, existingApp.status || 'pending')); setToast({ message: 'You have already applied to this position', type: 'warning' }); return; }
-      const { error: insertError } = await supabase.from('applications').insert([{ post_id: selectedPostId, student_id: liveUser.id, status: 'pending', created_at: new Date().toISOString() }]).select();
+
+      // 🔧 Resolve company_id from the selected post BEFORE inserting.
+      //    selectedPost already has companies joined from the ojt_posts query,
+      //    so we can read it directly. Fallback to a fresh query if missing.
+      let companyId: string | undefined;
+      if (selectedPost.companies) {
+        const c = Array.isArray(selectedPost.companies) ? selectedPost.companies[0] : selectedPost.companies;
+        companyId = c?.id;
+      }
+      if (!companyId) {
+        const { data: fetchedPost } = await supabase
+          .from('ojt_posts')
+          .select('company_id')
+          .eq('id', selectedPostId)
+          .maybeSingle();
+        companyId = (fetchedPost as any)?.company_id;
+      }
+
+      const applicationRow: Record<string, unknown> = {
+        post_id: selectedPostId,
+        student_id: liveUser.id,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      };
+      if (companyId) {
+        applicationRow.company_id = companyId;
+      }
+
+      const { error: insertError } = await supabase.from('applications').insert([applicationRow]).select();
       if (insertError) {
         if (insertError.code === '23505') { setAppStatus('pending'); setApplicationStatuses(prev => new Map(prev).set(selectedPostId, 'pending')); setToast({ message: 'Already applied to this position', type: 'warning' }); return; }
         throw new Error(insertError.message || 'Failed to submit application');
       }
       setAppStatus('pending');
       setApplicationStatuses(prev => new Map(prev).set(selectedPostId, 'pending'));
+      // 🔔 Fire a notification to the company so their bell lights up.
+      // Non-blocking — application already succeeded.
+      notifyCompanyOfNewApplicant({ postId: selectedPostId, studentId: liveUser.id });
       setToast({ message: '🎉 Application submitted successfully!', type: 'success' });
       setTimeout(() => closeCard(), 1500);
     } catch (err) {
@@ -823,7 +1274,7 @@ export default function MapPage() {
       setApplyingPostId(null);
       setIsApplying(false);
     }
-  }, [selectedPostId, selectedPost, userId, supabase, hasActiveOJT, activeOJTPostId, activeOJTCompany]);
+  }, [selectedPostId, selectedPost, userId, supabase, hasActiveOJT, activeOJTPostId, activeOJTCompany, notifyCompanyOfNewApplicant]);
 
   const handleRecenter = useCallback(() => {
     if (navigator.geolocation) {
@@ -873,20 +1324,20 @@ export default function MapPage() {
     <div className="fixed inset-0 bg-slate-900 font-sans overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <MapComponent posts={filteredPosts} selectedPostId={selectedPostId} studentLocation={studentLoc} studentSkills={profile?.skills || []} studentCourse={profile?.course} userId={userId ?? undefined} travelMode={travelMode} onPostSelect={selectPost} showDirections={showRoute} targetPost={selectedPost ? { lat: selectedPost.latitude, lng: selectedPost.longitude } : null} mapStyle={mapStyle} isTracking={isTracking} onRecenter={handleRecenter} gpsAccuracy={gpsAccuracy} fitBoundsTrigger={fitBoundsTrigger} applicationStatuses={applicationStatuses} hasActiveOJT={hasActiveOJT} activeOJTCompanyId={activeOJTCompanyId} activeOJTPostId={activeOJTPostId} />
+           <MapComponent posts={filteredPosts} selectedPostId={selectedPostId} studentLocation={studentLoc} studentSkills={profile?.skills || []} studentCourse={profile?.course} userId={userId ?? undefined} travelMode={travelMode} onPostSelect={selectPost} showDirections={showRoute} targetPost={selectedPost ? { lat: selectedPost.latitude, lng: selectedPost.longitude } : null} mapStyle={mapStyle} isTracking={isTracking} onRecenter={handleRecenter} gpsAccuracy={gpsAccuracy} fitBoundsTrigger={fitBoundsTrigger} applicationStatuses={applicationStatuses} hasActiveOJT={hasActiveOJT} activeOJTCompanyId={activeOJTCompanyId} activeOJTPostId={activeOJTPostId} onLocationUpdate={(loc) => { setStudentLoc(loc); setFitBoundsTrigger(prev => prev + 1); }} />
 
       {/* ═══════════════════ HEADER ═══════════════════ */}
-      <header className="absolute top-0 left-0 right-0 z-40 px-3 py-3 md:px-4 md:py-4">
+     <header className="absolute top-0 left-0 right-0 z-40 px-2 py-2 sm:px-3 sm:py-3 md:px-4 md:py-4">
         <div className="flex items-center gap-2">
-          <Link href="/student_main" className="group relative bg-white/95 backdrop-blur-xl px-3 md:px-4 py-2.5 md:py-3 rounded-2xl shadow-lg shadow-black/[0.08] border border-white/60 flex items-center gap-2 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden shrink-0">
+         <Link href="/student_main" className="group relative bg-white/95 backdrop-blur-xl px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-xl sm:rounded-2xl shadow-lg shadow-black/[0.08] border border-white/60 flex items-center gap-1.5 gap-1 sm:gap-2 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden shrink-0">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-transparent to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="relative w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shrink-0">
+    <div className="relative w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shrink-0">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="white" fillOpacity="0.2" /><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="9" r="2.5" fill="white" /></svg>
             </div>
-            <div className="relative flex flex-col leading-none">
-              <span className="text-lg md:text-xl font-black bg-gradient-to-b from-blue-600 to-indigo-700 bg-clip-text text-transparent tracking-tight">OJTly</span>
-              <span className="text-[7px] md:text-[8px] font-bold text-slate-400 tracking-[0.12em] uppercase -mt-0.5 hidden sm:block">Map Explorer</span>
-            </div>
+          <div className="relative flex flex-col leading-none">
+  <span className="text-base sm:text-lg md:text-xl font-black bg-gradient-to-b from-blue-600 to-indigo-700 bg-clip-text text-transparent tracking-tight">OJTly</span>
+  <span className="text-[7px] md:text-[8px] font-bold text-slate-400 tracking-[0.12em] uppercase -mt-0.5 hidden md:block">Map Explorer</span>
+</div>
           </Link>
           <div className="flex-1" />
 
@@ -897,96 +1348,166 @@ export default function MapPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md border border-emerald-200 px-3 py-2 rounded-full shadow-sm shrink-0">
-            <div className="relative"><div className="w-2 h-2 bg-emerald-500 rounded-full" /><div className="absolute inset-0 w-2 h-2 bg-emerald-500 rounded-full animate-ping" /></div>
-            <span className="text-[11px] md:text-xs font-bold text-emerald-700">LIVE</span>
-            <span className="text-[11px] md:text-xs font-bold text-emerald-600">{filteredPosts.length}</span>
-          </div>
-          <button type="button" onClick={toggleMapStyle} title={mapStyle === 'light' ? 'Satellite' : 'Map'} className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm transition-all border shadow-sm shrink-0 ${mapStyle === 'satellite' ? 'bg-indigo-500 text-white border-indigo-600 shadow-md' : 'bg-white/95 backdrop-blur-md border-slate-200 hover:border-indigo-300'}`}>{mapStyle === 'light' ? '🛰️' : '🌐'}</button>
-          <div className="flex bg-white/95 backdrop-blur-md rounded-xl p-0.5 gap-0.5 shadow-sm border border-white/60 shrink-0">
-            {modes.map(m => (<button key={m.v} type="button" onClick={() => changeMode(m.v)} title={m.l} className={`w-9 h-9 rounded-lg text-sm transition-all flex items-center justify-center ${travelMode === m.v ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md scale-105' : 'hover:bg-slate-50 text-slate-600'}`}>{m.i}</button>))}
-          </div>
-          <Link href="/student_main" className="w-10 h-10 bg-white/95 backdrop-blur-md rounded-xl shadow-sm flex items-center justify-center hover:bg-white transition-all border border-white/60 shrink-0"><svg className="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg></Link>
-          <HeaderAvatar profile={profile} profileLoading={profileLoading} userId={userId} />
+        <div className="flex items-center gap-1 bg-white/95 backdrop-blur-md border border-emerald-200 px-2 py-1.5 sm:py-2 rounded-full shadow-sm shrink-0">
+  <div className="relative"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /><div className="absolute inset-0 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" /></div>
+  <span className="text-[11px] md:text-xs font-bold text-emerald-600">{filteredPosts.length}</span>
+  <span className="hidden md:inline text-[10px] font-semibold text-slate-400">posts</span>
+</div>
+     <button type="button" onClick={toggleMapStyle} title={mapStyle === 'light' ? 'Satellite' : 'Map'} className={`flex w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg sm:rounded-xl items-center justify-center text-xs sm:text-sm transition-all border shadow-sm shrink-0 ${mapStyle === 'satellite' ? 'bg-indigo-500 text-white border-indigo-600 shadow-md' : 'bg-white/95 backdrop-blur-md border-slate-200 hover:border-indigo-300'}`}>{mapStyle === 'light' ? '🛰️' : '🌐'}</button>
+         <Link href="/student_main" className="hidden sm:flex w-10 h-10 bg-white/95 backdrop-blur-md rounded-xl shadow-sm items-center justify-center hover:bg-white transition-all border border-white/60 shrink-0"><svg className="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg></Link>
+       <div className="flex items-center gap-1 sm:gap-1.5 ">
+  <div className="relative bg-white rounded-full shadow-md border border-white/80">
+  <NotificationBell />
+</div>
+  <HeaderAvatar profile={profile} profileLoading={profileLoading} userId={userId} />
+</div>
         </div>
       </header>
 
-      {/* ═══════════════════ LEFT PANEL ═══════════════════ */}
-       <div className="absolute left-2 md:left-4 z-40 w-[calc(100%-16px)] md:w-[340px]" style={{ top: '93px' }}>
-        {isTracking && gpsAccuracy !== undefined && (
-          <div className="inline-flex items-center gap-1.5 bg-emerald-500/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg shadow-emerald-500/30 mb-3">
-            <div className="relative flex-shrink-0"><div className="w-1.5 h-1.5 bg-white rounded-full" /><div className="absolute inset-0 w-1.5 h-1.5 bg-white rounded-full animate-ping" /></div>
-            GPS ±{Math.round(gpsAccuracy)}m
-          </div>
-        )}
+     {/* ═══════════════════ LEFT PANEL (collapsible on mobile) ═══════════════════ */}
 
-        <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 overflow-hidden">
-          <div className="p-4 md:p-5 pb-4 md:pb-5">
-            <div className="relative">
-              <input type="text" placeholder="Search OJT posts..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onFocus={() => setShowSearch(true)} className="w-full pl-10 pr-9 py-3 bg-slate-50/80 rounded-xl border-2 border-transparent focus:border-blue-500 focus:bg-white outline-none text-sm transition-all placeholder:text-slate-400" />
-              <svg className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              {searchQuery && (<button onClick={() => setSearchQuery('')} className="absolute right-3 top-3 p-1 hover:bg-slate-200 rounded-full transition-colors"><svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>)}
-            </div>
-          </div>
+{/* Mobile toggle button - floating */}
+<button
+  type="button"
+  onClick={() => setIsLeftPanelOpen(true)}
+  className="md:hidden fixed left-3 z-40 bg-white/95 backdrop-blur-xl rounded-full shadow-lg border border-white/60 p-3 flex items-center gap-2 hover:scale-105 transition-all"
+  style={{ top: '80px' }}
+  aria-label="Open search & profile"
+>
+  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+  <span className="text-xs font-bold text-slate-700">Search</span>
+</button>
 
-          <div className="h-[1px] bg-slate-200/60 mx-4 md:mx-5" />
+{/* Mobile backdrop when panel is open */}
+{isLeftPanelOpen && (
+  <div
+    className="md:hidden fixed inset-0 bg-black/30 z-40 backdrop-blur-sm"
+    onClick={() => setIsLeftPanelOpen(false)}
+  />
+)}
 
-          <div className="pt-4 pb-1">
-            <ProfileOverlay profile={profile} profileLoading={profileLoading} profileError={profileError} userId={userId} isTracking={isTracking} isLocating={isLocating} studentLoc={studentLoc} showLocPopup={showLocPopup} onToggleTracking={() => { if (isTracking) stopTracking(); else startTracking(); }} onDetectLoc={detectLoc} onOpenPopup={() => setShowLocPopup(true)} onClosePopup={() => setShowLocPopup(false)} onStopTracking={stopTracking} />
-          </div>
-        </div>
+{/* The panel itself - drawer on mobile, fixed on desktop */}
+<div className={`
+  ${isLeftPanelOpen ? 'translate-x-0' : '-translate-x-full'}
+  md:translate-x-0
+  fixed md:absolute
+  left-0 top-0 bottom-0
+  md:left-4 md:top-[88px] md:bottom-auto
+  md:right-auto
+  w-[85vw] max-w-sm md:w-[340px]
+  md:max-w-none
+  z-50 md:z-40
+  transition-transform duration-300 ease-out
+  p-3 md:p-0
+  overflow-y-auto md:overflow-visible
+`}>
+  {/* Close button - mobile only */}
+  <button
+    type="button"
+    onClick={() => setIsLeftPanelOpen(false)}
+    className="md:hidden absolute top-3 right-3 z-10 p-2 bg-white rounded-full shadow-md border border-slate-200 hover:bg-slate-50"
+    aria-label="Close panel"
+  >
+    <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  </button>
 
-        {/* SEARCH RESULTS */}
-        {showSearch && searchQuery && (
-          <div className="bg-white/98 backdrop-blur-xl rounded-2xl shadow-2xl shadow-black/20 border border-slate-200/60 max-h-[260px] overflow-y-auto scrollbar-thin mt-3">
-            {filteredPosts.length > 0 ? (
-              <div className="p-2 space-y-1">
-                {filteredPosts.slice(0, 5).map(post => {
-                  const k = getKNNScore(post, studentLoc, profile?.skills || [], profile?.course);
-                  const c = getMarkerColor(k.score);
-                  const searchAppStatus = getSearchResultStatus(post.id);
-                  const isThisActive = isActiveOJTPost(post.id);
-                  return (
-                    <button key={post.id} type="button" onClick={() => { selectPost(post); setShowSearch(false); setSearchQuery(''); }} className="w-full p-2.5 flex items-center gap-2.5 rounded-xl hover:bg-blue-50/70 transition-all text-left group border border-transparent hover:border-blue-200">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md relative" style={{ background: `linear-gradient(135deg, ${c.bg}, ${c.border})` }}>
-                        {(post.location_name || post.title || post.company_name || post.companies?.company_name || 'O').charAt(0).toUpperCase()}
-                        {isThisActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white" />}
-                        {!isThisActive && searchAppStatus && <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getStatusDotColor(searchAppStatus)}`} />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-slate-800 truncate group-hover:text-blue-600">{post.location_name || post.title || post.company_name || post.companies?.company_name || 'Untitled'}</h4>
-                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: c.bg }}>🎯 {userId ? k.skillMatch + '%' : '—'}</span>
-                          <span className="text-[10px] text-slate-400">{userId ? k.distance + ' km' : ''}</span>
-                          {k.courseMatch && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">🎓</span>}
-                          {isThisActive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">⭐ Current</span>}
-                          {!isThisActive && hasActiveOJT && activeOJTPostId !== post.id && (() => {
-                            const postCompanyId = post.companies?.id;
-                            if (activeOJTCompanyId && postCompanyId && activeOJTCompanyId === postCompanyId) {
-                              return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">📋 Other post</span>;
-                            }
-                            return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">🏢 Hired elsewhere</span>;
-                          })()}
-                          {!isThisActive && searchAppStatus && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${getStatusStyle(searchAppStatus)}`}>{getStatusLabel(searchAppStatus)}</span>)}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (<div className="p-8 text-center"><p className="text-sm text-slate-500">No posts found for &quot;{searchQuery}&quot;</p></div>)}
-          </div>
-        )}
+  {isTracking && gpsAccuracy !== undefined && (
+    <div className="inline-flex items-center gap-1.5 bg-emerald-500/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg shadow-emerald-500/30 mb-3 mt-12 md:mt-0">
+      <div className="relative flex-shrink-0"><div className="w-1.5 h-1.5 bg-white rounded-full" /><div className="absolute inset-0 w-1.5 h-1.5 bg-white rounded-full animate-ping" /></div>
+      GPS ±{Math.round(gpsAccuracy)}m
+    </div>
+  )}
 
-        <div className="bg-white/95 backdrop-blur-xl rounded-full shadow-lg px-5 py-2.5 inline-flex items-center gap-2 mt-3">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-base font-bold text-slate-800">{filteredPosts.length}</span>
-          <span className="text-sm text-slate-500 font-medium hidden sm:inline">Live Posts</span>
-        </div>
+  <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl shadow-black/10 overflow-hidden">
+    <div className="p-3 md:p-5 pb-3 md:pb-5">
+      <div className="relative">
+        <input type="text" placeholder="Search OJT posts..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onFocus={() => setShowSearch(true)} className="w-full pl-9 pr-9 py-2.5 md:py-3 bg-slate-50/80 rounded-xl border-2 border-transparent focus:border-blue-500 focus:bg-white outline-none text-sm transition-all placeholder:text-slate-400" />
+        <svg className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        {searchQuery && (<button onClick={() => setSearchQuery('')} className="absolute right-3 top-3 p-1 hover:bg-slate-200 rounded-full transition-colors"><svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>)}
       </div>
+    </div>
+
+    <div className="h-[1px] bg-slate-200/60 mx-4 md:mx-5" />
+
+    <div className="pt-2 md:pt-4 pb-1">
+      <ProfileOverlay profile={profile} profileLoading={profileLoading} profileError={profileError} userId={userId} isTracking={isTracking} isLocating={isLocating} studentLoc={studentLoc} showLocPopup={showLocPopup} onToggleTracking={() => { if (isTracking) stopTracking(); else startTracking(); }} onDetectLoc={detectLoc} onOpenPopup={() => setShowLocPopup(true)} onClosePopup={() => setShowLocPopup(false)} onStopTracking={stopTracking} />
+    </div>
+  </div>
+
+  {/* SEARCH RESULTS */}
+  {showSearch && searchQuery && (
+    <div className="bg-white/98 backdrop-blur-xl rounded-2xl shadow-2xl shadow-black/20 border border-slate-200/60 max-h-[260px] overflow-y-auto scrollbar-thin mt-3">
+      {filteredPosts.length > 0 ? (
+        <div className="p-2 space-y-1">
+          {filteredPosts.slice(0, 5).map(post => {
+            const k = getKNNScore(post, studentLoc, profile?.skills || [], profile?.course);
+            const c = getMarkerColor(k.score);
+            const searchAppStatus = getSearchResultStatus(post.id);
+            const isThisActive = isActiveOJTPost(post.id);
+            return (
+              <button key={post.id} type="button" onClick={() => { selectPost(post); setShowSearch(false); setSearchQuery(''); setIsLeftPanelOpen(false); }} className="w-full p-2.5 flex items-center gap-2.5 rounded-xl hover:bg-blue-50/70 transition-all text-left group border border-transparent hover:border-blue-200">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md relative" style={{ background: `linear-gradient(135deg, ${c.bg}, ${c.border})` }}>
+                  {(post.location_name || post.title || post.company_name || post.companies?.company_name || 'O').charAt(0).toUpperCase()}
+                  {isThisActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white" />}
+                  {!isThisActive && searchAppStatus && <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getStatusDotColor(searchAppStatus)}`} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-sm text-slate-800 truncate group-hover:text-blue-600">{post.location_name || post.title || post.company_name || post.companies?.company_name || 'Untitled'}</h4>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: c.bg }}>🎯 {userId ? k.skillMatch + '%' : '—'}</span>
+                    <span className="text-[10px] text-slate-400">{userId ? k.distance + ' km' : ''}</span>
+                    {k.courseMatch && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">🎓</span>}
+                    {isThisActive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">⭐ Current</span>}
+                    {!isThisActive && hasActiveOJT && activeOJTPostId !== post.id && (() => {
+                      const postCompanyId = post.companies?.id;
+                      if (activeOJTCompanyId && postCompanyId && activeOJTCompanyId === postCompanyId) {
+                        return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">📋 Other post</span>;
+                      }
+                      return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">🏢 Hired elsewhere</span>;
+                    })()}
+                    {!isThisActive && searchAppStatus && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${getStatusStyle(searchAppStatus)}`}>{getStatusLabel(searchAppStatus)}</span>)}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (<div className="p-8 text-center"><p className="text-sm text-slate-500">No posts found for &quot;{searchQuery}&quot;</p></div>)}
+    </div>
+  )}
+
+  <div className="hidden sm:inline-flex bg-white/95 backdrop-blur-xl rounded-full shadow-lg px-5 py-2.5 items-center gap-3 mt-3">
+    <div className="flex items-center gap-2">
+      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+      <span className="text-base font-bold text-slate-800">{filteredPosts.length}</span>
+      <span className="text-sm text-slate-500 font-medium">Live Posts</span>
+    </div>
+    {/* 🔖 Saved filter toggle */}
+    <button
+      onClick={() => setShowSavedOnly(!showSavedOnly)}
+      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
+        showSavedOnly ? 'bg-amber-400 text-slate-900' : 'bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-600'
+      }`}
+    >
+      <svg className="w-3.5 h-3.5" fill={showSavedOnly ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+      </svg>
+      Saved ({savedPostIds.size})
+    </button>
+  </div>
+</div>
 
       {/* ═══════════════════ DETAIL PANEL ═══════════════════ */}
-      <div className={`absolute top-0 right-0 bottom-0 w-full md:max-w-[440px] lg:max-w-[480px] z-50 transform transition-transform duration-500 ease-out ${isCardOpen && showFullPanel ? 'translate-x-0' : 'translate-x-full'}`}>
+       
+       <div className={`absolute top-0 right-0 bottom-0 w-full md:max-w-[440px] lg:max-w-[480px] z-50 transform transition-transform duration-500 ease-out ${
+  isCardOpen && showFullPanel
+    ? 'translate-x-0 flex'
+    : 'translate-x-full pointer-events-none hidden md:flex'
+}`}>
         {selectedPost ? (
           <div className="h-full bg-white md:rounded-l-3xl shadow-2xl shadow-black/20 overflow-hidden flex flex-col md:mx-3 md:my-4 md:mr-4">
             <div className="p-4 md:p-6 pb-3 border-b border-slate-100 relative bg-gradient-to-b from-slate-50/50 to-white shrink-0">
@@ -1033,6 +1554,9 @@ export default function MapPage() {
                       }
                       if (normalized === 'rejected' || normalized === 'declined') {
                         return <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-bold border-red-200">❌ Rejected</span>;
+                      }
+                      if (normalized === 'completed') {
+                        return <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold border border-blue-200"><CheckCircleIcon className="w-3 h-3" />OJT Completed</span>;
                       }
                       return null;
                     })()}
@@ -1085,6 +1609,7 @@ export default function MapPage() {
                         if (n === 'accepted' || n === 'approved') return <><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /><span className="text-emerald-700">Your Current OJT</span></>;
                         if (n === 'pending' || n === 'under review') return <><span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" /><span className="text-amber-600">Application Pending</span></>;
                         if (n === 'rejected' || n === 'declined') return <><span className="w-1.5 h-1.5 bg-red-500 rounded-full" /><span className="text-red-600">Rejected</span></>;
+                        if (n === 'completed') return <><span className="w-1.5 h-1.5 bg-blue-500 rounded-full" /><span className="text-blue-700">OJT Completed</span></>;
                         return <><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /><span className="text-emerald-600">Accepting</span></>;
                       })()}
                     </p>
@@ -1100,7 +1625,7 @@ export default function MapPage() {
                   </div>
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
-                  {selectedPost.vacancies && <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-bold border border-emerald-200">💼 {selectedPost.vacancies} slots</span>}
+                  {selectedPost.vacancies != null && <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${Number(selectedPost.vacancies) <= 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>💼 {Number(selectedPost.vacancies) <= 0 ? 'No Slots' : `${selectedPost.vacancies} slots`}</span>}
                   {selectedPost.duration_hours && <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold border-blue-200">⏱ {selectedPost.duration_hours} hrs</span>}
                   {selectedPost.allowance_type && (<span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${selectedPost.allowance_type === 'Paid' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>💰 {selectedPost.allowance_type}</span>)}
                   {selectedPost.course_category && <span className="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-bold border border-purple-200">🎓 {selectedPost.course_category}</span>}
@@ -1201,17 +1726,27 @@ export default function MapPage() {
                     </button>
                   );
                 })()}
-                <button className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-white text-slate-600 font-semibold rounded-lg sm:rounded-xl border-2 border-slate-200 hover:border-blue-200 hover:text-blue-600 hover:bg-blue-50/30 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm">
-                  <BookmarkIcon className="w-4 h-4 sm:w-5 sm:h-5" /> Save Position
+                <button
+                  onClick={() => selectedPost && toggleSavePost(selectedPost.id)}
+                  className={`w-full sm:flex-1 py-2.5 sm:py-3.5 font-semibold rounded-lg sm:rounded-xl border-2 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2 text-xs sm:text-sm ${
+                    selectedPost && savedPostIds.has(selectedPost.id)
+                      ? 'bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-amber-200 hover:text-amber-600 hover:bg-amber-50/30'
+                  }`}
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill={selectedPost && savedPostIds.has(selectedPost.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  {selectedPost && savedPostIds.has(selectedPost.id) ? 'Saved' : 'Save Position'}
                 </button>
               </div>
             </div>
           </div>
-        ) : (
-          <div className="h-full flex items-center justify-center p-8 text-center bg-white/98 backdrop-blur-xl">
-            <div className="max-w-xs mx-auto">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-6 text-5xl shadow-inner">🗺️</div>
-              <h3 className="text-2xl font-bold text-slate-800 mb-3">Live OJT Board</h3>
+       ) : (
+  <div className="h-full hidden md:flex items-center justify-center p-8 text-center bg-white/98 backdrop-blur-xl">
+    <div className="max-w-xs mx-auto">
+      <div className="w-20 h-20 bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-6 text-5xl shadow-inner">🗺️</div>
+      <h3 className="text-2xl font-bold text-slate-800 mb-3">Live OJT Board</h3>
               <p className="text-slate-500 text-sm leading-relaxed mb-6">Tap any marker on the map to view job details and apply.</p>
               <div className="space-y-3 text-left bg-slate-50 rounded-xl p-4">
                 {[
@@ -1220,7 +1755,8 @@ export default function MapPage() {
                   { color: 'bg-slate-400', label: 'Other Opportunity' },
                   { color: 'bg-emerald-600', label: '🟢 Your Current OJT', divider: true },
                   { color: 'bg-blue-500', label: '📋 Hired in other post (same company)', divider: true },
-                  { color: 'bg-amber-500', label: '🏢 Hired by other company', divider: true }
+                  { color: 'bg-amber-500', label: '🏢 Hired by other company', divider: true },
+                  { color: 'bg-blue-500', label: '🎓 OJT Completed', divider: true }
                 ].map(({ color, label, divider }) => (
                   <div key={label} className={`flex items-center gap-3 text-sm ${divider ? 'mt-3 pt-3 border-t border-slate-200' : ''}`}>
                     <div className={`w-3 h-3 rounded-full ${color} shadow-sm shrink-0`} />
@@ -1261,6 +1797,68 @@ export default function MapPage() {
         .tabular-nums { font-variant-numeric: tabular-nums; }
         .overscroll-contain { overscroll-behavior: contain; }
       `}</style>
+
+      {/* 💬 Floating Chat Bubble — enabled when accepted */}
+      {userId && (
+        <div className="fixed bottom-6 right-6 z-[5000] flex flex-col items-center gap-1">
+          {(() => {
+            const canChat = hasActiveOJT && activeOJTCompany && companyUserId;
+            const reason = !canChat
+              ? !hasActiveOJT ? 'Not accepted yet'
+              : !companyUserId ? 'Loading...'
+              : 'Unavailable'
+              : '';
+            return (
+              <>
+                <button
+                  onClick={() => canChat && setShowChat(true)}
+                  disabled={!canChat}
+                  className={`w-14 h-14 rounded-full shadow-lg transition-all flex items-center justify-center relative ${
+                    canChat
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={canChat ? `Message ${activeOJTCompany}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}` : reason}
+                >
+                  <svg className="w-7 h-7 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  {!canChat && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
+                      </svg>
+                    </span>
+                  )}
+                  {/* 🔴 Red badge + 🔵 blue pulsing ring when there are unread messages */}
+                  {canChat && chatUnread > 0 && (
+                    <>
+                      <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md z-10">
+                        {chatUnread > 9 ? '9+' : chatUnread}
+                      </span>
+                    </>
+                  )}
+                </button>
+                {!canChat && (
+                  <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">{reason}</span>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* 💬 Chat Modal */}
+      {showChat && userId && companyUserId && (
+        <ChatPanel
+          myUserId={userId}
+          otherUserId={companyUserId}
+          myName={profile?.full_name || 'Student'}
+          otherName={activeOJTCompany}
+          onClose={() => setShowChat(false)}
+        />
+      )}
     </div>
   );
 }
