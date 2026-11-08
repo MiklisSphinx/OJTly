@@ -1,4 +1,4 @@
-  'use client';
+'use client';
   import { createClient } from '@/utils/supabase/client';
   import { useState } from 'react';
   import Link from 'next/link';
@@ -12,29 +12,32 @@
     const handleReset = async (e: React.FormEvent) => {
       e.preventDefault();
       setLoading(true);
-      
+
+      // ✅ FIXED: use `emailRedirectTo` (NOT `redirectTo`)
+      // `redirectTo` is for OAuth (Google login).
+      // `emailRedirectTo` is for password reset + magic links.
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/student/resetpassword`,
+        emailRedirectTo: `${window.location.origin}/student/resetpassword`,
       });
-      
+
       if (error) alert(error.message);
       else setMessage("Check your email for the reset link.");
-      
+
       setLoading(false);
     };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-800 relative overflow-hidden">
-        
+
         {/* Animated Background Orbs */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-float"></div>
           <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-float-delayed"></div>
           <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-slow"></div>
-          
+
           {/* Grid Pattern */}
-          <div 
-            className="absolute inset-0 opacity-[0.03]" 
+          <div
+            className="absolute inset-0 opacity-[0.03]"
             style={{
               backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
               backgroundSize: '40px 40px'
@@ -44,7 +47,7 @@
 
         {/* Main Container */}
         <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
-          
+
           {/* Logo */}
           <Link href="/student/login" className="group mb-10">
             <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm px-5 py-2.5 rounded-full border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105">
@@ -58,7 +61,7 @@
           {/* Card */}
           <div className="w-full max-w-md">
             <div className="bg-white/[0.08] backdrop-blur-xl border border-white/[0.15] rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/20">
-              
+
               {message ? (
                 /* Success State */
                 <div className="text-center py-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -80,7 +83,7 @@
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
                       </svg>
                     </div>
-                    
+
                     <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">
                       Forgot password?
                     </h1>
@@ -90,7 +93,7 @@
                   </div>
 
                   <form onSubmit={handleReset} className="space-y-5">
-                    
+
                     {/* Email Input */}
                     <div className="relative group">
                       <label className="block text-sm font-medium text-purple-200/80 mb-2 ml-1">
@@ -105,7 +108,7 @@
                         placeholder="name@university.edu"
                         className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.15] rounded-xl text-white placeholder:text-purple-300/40 focus:border-blue-400/50 focus:bg-white/[0.09] focus:ring-2 focus:ring-blue-400/20 outline-none transition-all duration-200 disabled:opacity-50"
                       />
-                      
+
                       {/* Focus Glow */}
                       <div className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-r from-blue-500/0 via-blue-500/0 to-cyan-500/0 group-focus-within:from-blue-500/10 group-focus-within:via-blue-500/5 group-focus-within:to-cyan-500/10 blur-xl transition-all duration-300"></div>
                     </div>
@@ -142,8 +145,8 @@
 
               {/* Footer */}
               <div className="mt-8 pt-6 border-t border-white/[0.08] text-center">
-                <Link 
-                  href="/student/login" 
+                <Link
+                  href="/student/login"
                   className="inline-flex items-center gap-2 text-sm text-purple-300/70 hover:text-white transition-colors group"
                 >
                   <svg className="w-4 h-4 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
