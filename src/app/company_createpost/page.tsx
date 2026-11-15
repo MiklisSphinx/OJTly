@@ -1367,7 +1367,11 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
         </button>
       )}
 
+
+
       {/* 💬 Company Chat Modal */}
+
+      {/*updated company create post feature*/}
       {showChat && authUserId && (
         <CompanyChat
           userId={authUserId}
