@@ -1,0 +1,16 @@
+{
+   "name": "OJTly",
+  "short_name": "OJTly",
+  "description": "Launch your career with the perfect internship",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4F46E5",
+ "icons": [
+    {
+      "src": "/ojt-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
