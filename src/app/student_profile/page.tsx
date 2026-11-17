@@ -23,6 +23,8 @@ type UserProfile = {
   location: string;
   school: string;
   yearLevel: string;
+  strand: string;
+  section: string;
   avatar: string | null;
   resumeUrl: string | null;
   resumeName: string;
@@ -58,6 +60,8 @@ export default function ProfilePage() {
     location: '',
     school: '',
     yearLevel: '',
+    strand: '',
+    section: '',
     avatar: null,
     resumeUrl: null,
     resumeName: 'No resume uploaded'
@@ -156,6 +160,8 @@ export default function ProfilePage() {
             location: profile.location || 'Not specified',
             school: profile.school_name || 'Not specified',
             yearLevel: profile.year_level || 'N/A',
+            strand: profile.strand || '',
+            section: profile.section || '',
             avatar: profile.avatar_url || null,
             resumeUrl: profile.resume_url || null,
             resumeName: profile.resume_url
@@ -603,6 +609,7 @@ export default function ProfilePage() {
         id: authUser.id, email: authUser.email, full_name: tempUser.name.trim(),
         course: tempUser.course.trim(), location: tempUser.location.trim(),
         school_name: tempUser.school.trim(), year_level: tempUser.yearLevel,
+        strand: tempUser.strand.trim(), section: tempUser.section.trim(),
         avatar_url: avatarUrl,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
@@ -610,7 +617,8 @@ export default function ProfilePage() {
       setUser(prev => ({
         ...prev, name: tempUser.name.trim(), course: tempUser.course.trim(),
         location: tempUser.location.trim(), school: tempUser.school.trim(),
-        yearLevel: tempUser.yearLevel, avatar: avatarUrl
+        yearLevel: tempUser.yearLevel, strand: tempUser.strand.trim(),
+        section: tempUser.section.trim(), avatar: avatarUrl
       }));
       setIsProfileModalOpen(false);
       router.refresh();
@@ -664,7 +672,7 @@ export default function ProfilePage() {
     try {
       const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) console.error('SignOut error:', error.message);
-      setUser({ name: '', course: '', location: '', school: '', yearLevel: '', avatar: null, resumeUrl: null, resumeName: 'No resume uploaded' });
+      setUser({ name: '', course: '', location: '', school: '', yearLevel: '', strand: '', section: '', avatar: null, resumeUrl: null, resumeName: 'No resume uploaded' });
       setProgress({ completed: 0, total: 500, company: '', status: 'Not Started', appStatus: null });
       setAttendedDays(new Set());
       setAttendanceRecords([]);
@@ -919,7 +927,9 @@ export default function ProfilePage() {
               {[
                 { label: 'School', value: user.school },
                 { label: 'Course', value: user.course },
-                { label: 'Year Level', value: user.yearLevel }
+                { label: 'Year Level', value: user.yearLevel },
+                { label: 'Strand', value: user.strand || 'N/A' },
+                { label: 'Section', value: user.section || 'N/A' }
               ].map((item) => (
                 <div key={item.label} className="flex justify-between items-center pb-2 sm:pb-3 border-b border-slate-50 last:border-0 last:pb-0">
                   <span className="text-xs sm:text-sm text-slate-500">{item.label}</span>
@@ -1200,6 +1210,39 @@ export default function ProfilePage() {
                     value={tempUser.school}
                     onChange={(e) => setTempUser({ ...tempUser, school: e.target.value })}
                   />
+                </div>
+
+                {/* 🎓 SHS Fields — Strand + Section */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Strand (SHS)</label>
+                    <select
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-blue-500 outline-none appearance-none text-sm sm:text-base"
+                      value={tempUser.strand}
+                      onChange={(e) => setTempUser({ ...tempUser, strand: e.target.value })}
+                    >
+                      <option value="">Select Strand</option>
+                      <option value="STEM">STEM</option>
+                      <option value="ABM">ABM</option>
+                      <option value="HUMSS">HUMSS</option>
+                      <option value="GAS">GAS</option>
+                      <option value="TVL-ICT">TVL - ICT</option>
+                      <option value="TVL-HE">TVL - HE</option>
+                      <option value="TVL-Agri">TVL - Agri</option>
+                      <option value="Arts and Design">Arts and Design</option>
+                      <option value="Sports">Sports</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Section</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm sm:text-base"
+                      value={tempUser.section}
+                      onChange={(e) => setTempUser({ ...tempUser, section: e.target.value })}
+                      placeholder="e.g. Rizal, Aguinaldo"
+                    />
+                  </div>
                 </div>
 
                 <div>

@@ -75,7 +75,37 @@ export default function AdminApprovalPage() {
   // ==========================================
   const fetchCompanies = useCallback(async () => {
     setLoading(true);
-    
+
+    // 🧹 Run full cleanup (auto-reject + auto-delete + detect spam)
+    // Runs every time the list refreshes, not just on mount.
+    try {
+      const { data: cleanupResult, error: cleanupError } = await supabase
+        .rpc('run_full_cleanup');
+
+      if (!cleanupError && cleanupResult) {
+        console.log('🧹 Cleanup result:', cleanupResult);
+
+        // Show toast if anything was cleaned up
+        if (cleanupResult.auto_rejected > 0 || cleanupResult.auto_deleted > 0) {
+          addToast(
+            `Cleanup: ${cleanupResult.auto_rejected} rejected, ${cleanupResult.auto_deleted} deleted`,
+            'info'
+          );
+        }
+
+        // Show warning if suspicious activity detected
+        if (cleanupResult.suspicious_domains && cleanupResult.suspicious_domains.length > 0) {
+          addToast(
+            `⚠️ Suspicious activity: ${cleanupResult.suspicious_domains.length} domains flagged`,
+            'error'
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('Cleanup error (non-fatal):', err);
+    }
+
+    // Now fetch ALL companies (cleanup has already updated their statuses)
     try {
       const { data, error } = await supabase
         .from('companies')
@@ -166,6 +196,34 @@ export default function AdminApprovalPage() {
       
     } catch (error: any) {
       addToast(error.message, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 🗑️ PERMANENT DELETE — deletes company + auth user + ALL related data
+  const handlePermanentDelete = async (companyId: string) => {
+    if (!confirm('⚠️ PERMANENT DELETE?\n\nThis will:\n• Delete the company record\n• Delete their auth account (can\'t login)\n• Delete all their posts, applications, messages, notifications\n\nThis CANNOT be undone. Continue?')) return;
+    
+    setActionLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('permanent_delete_company', {
+        p_company_id: companyId
+      });
+
+      if (error) throw error;
+
+      if (data === true) {
+        setCompanies((prev) => prev.filter((c) => c.id !== companyId));
+        setSelectedCompany(null);
+        setIsDrawerOpen(false);
+        addToast('✅ Company permanently deleted. Account removed.', 'success');
+        fetchCompanies();
+      } else {
+        addToast('Company not found.', 'error');
+      }
+    } catch (error: any) {
+      addToast(error.message || 'Failed to delete permanently', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -516,18 +574,29 @@ export default function AdminApprovalPage() {
                           </span>
                           
                           {company.is_deleted ? (
-                            /* RESTORE BUTTON IN LIST VIEW */
-                            <button 
-                              onClick={() => handleRestore(company.id)}
-                              disabled={actionLoading}
-                              className="px-5 sm:px-6 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold rounded-xl transition-all hover:shadow-lg flex items-center gap-2 active:scale-95 shrink-0"
-                            >
-                              {actionLoading ? (
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
-                              ) : (
-                                <>♻️ Restore</>
-                              )}
-                            </button>
+                            /* RESTORE + DELETE BUTTONS IN LIST VIEW */
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button 
+                                onClick={() => handleRestore(company.id)}
+                                disabled={actionLoading}
+                                className="px-4 sm:px-5 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold rounded-xl transition-all hover:shadow-lg flex items-center gap-2 active:scale-95 shrink-0"
+                              >
+                                {actionLoading ? (
+                                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373,0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                                ) : (
+                                  <>♻️ Restore</>
+                                )}
+                              </button>
+                              <button 
+                                onClick={() => handlePermanentDelete(company.id)}
+                                disabled={actionLoading}
+                                className="px-4 sm:px-5 py-2.5 sm:py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-semibold rounded-xl transition-all hover:shadow-lg flex items-center gap-2 active:scale-95 shrink-0"
+                                title="Permanently delete company + auth account"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                Delete
+                              </button>
+                            </div>
                           ) : (
                             <button 
                               onClick={() => openDrawer(company)}
@@ -726,11 +795,15 @@ export default function AdminApprovalPage() {
                     </button>
                     
                     <button 
-                      onClick={() => handleMoveToTrash(selectedCompany.id)} 
+                      onClick={() => handlePermanentDelete(selectedCompany.id)} 
                       disabled={actionLoading}
-                      className="w-full py-4 bg-white border-2 border-red-300 text-red-600 hover:bg-red-50 font-bold text-lg rounded-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                      className="w-full py-4 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold text-lg rounded-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
                     >
-                      🗑️ Delete Permanently
+                      {actionLoading ? (
+                        <svg className="animate-spin h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                      ) : (
+                        <>🗑️ Delete Permanently</>
+                      )}
                     </button>
                   </div>
                 ) : selectedCompany.status?.toLowerCase() === 'pending' ? (

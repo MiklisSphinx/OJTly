@@ -32,6 +32,8 @@ export default function ApplicantsPage() {
   const [showChat, setShowChat] = useState(false);
   const [portfolioApplicant, setPortfolioApplicant] = useState<any>(null);
   const [companyRecordId, setCompanyRecordId] = useState<string | null>(null);
+  // 🔒 Blob URL for PDF — bypasses Supabase download headers
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   // ===== Chat unread badge counts =====
   const [studentUnread, setStudentUnread] = useState(0);
   const [adminSupportUnread, setAdminSupportUnread] = useState(0);
@@ -43,6 +45,7 @@ export default function ApplicantsPage() {
     const cleanUrl = url.toLowerCase().split('?')[0];
     if (cleanUrl.endsWith('.pdf')) return 'pdf';
     if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].some(ext => cleanUrl.endsWith(ext))) return 'image';
+    if (['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.rtf'].some(ext => cleanUrl.endsWith(ext))) return 'document';
     return 'unknown';
   };
 
@@ -61,7 +64,27 @@ export default function ApplicantsPage() {
     const baseUrl = pathOrUrl.startsWith('http') 
       ? pathOrUrl.split('?')[0] 
       : supabase.storage.from('resumes').getPublicUrl(pathOrUrl).data.publicUrl.split('?')[0];
-    return `${baseUrl}#view=FitH&toolbar=0&navpanes=0&scrollbar=1`;
+    // #toolbar=0 hides the download/print buttons in Chrome's PDF viewer
+    // #navpanes=0 hides the sidebar
+    // #scrollbar=1 keeps scrolling enabled
+    return `${baseUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
+  };
+
+  // 🔒 Google Docs Viewer for Word/Excel/PowerPoint files — view only, no download
+  const getDocViewerLink = (pathOrUrl: string | null | undefined) => {
+    if (!pathOrUrl) return "";
+    const fileUrl = pathOrUrl.startsWith('http')
+      ? pathOrUrl.split('?')[0]
+      : supabase.storage.from('resumes').getPublicUrl(pathOrUrl).data.publicUrl.split('?')[0];
+    // Google Docs Viewer renders .doc/.docx/.xls/.xlsx/.ppt/.pptx in a view-only iframe
+    // No download button, no print button, completely view-only
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+  };
+
+  // 🔒 Anti-download wrapper — prevents right-click, drag, and keyboard shortcuts
+  const preventContextMenu = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    return false;
   };
 
   useEffect(() => {
@@ -318,9 +341,53 @@ export default function ApplicantsPage() {
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
+    // 🔒 Block Ctrl+S (download shortcut) while modal is open
+    const blockDownloadShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
     window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
+    window.addEventListener('keydown', blockDownloadShortcut);
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+      window.removeEventListener('keydown', blockDownloadShortcut);
+    };
   }, []);
+
+  // 🔒 Fetch PDF as blob when modal opens — bypasses Supabase Content-Disposition: attachment
+  //    header that forces download. Blob URL has no download headers → renders inline.
+  useEffect(() => {
+    if (isModalOpen && selectedApplicant?.profiles?.resume_url) {
+      const fileType = getFileType(selectedApplicant.profiles.resume_url);
+      if (fileType === 'pdf') {
+        // 🔒 Only PDFs get the blob treatment — Chrome can render PDFs from blob URLs.
+        // Word/Excel/PPT CANNOT be rendered from blob URLs (browser triggers "Save As"),
+        // so they use Google Docs Viewer instead (which fetches from Google's servers).
+        (async () => {
+          try {
+            const url = getResumeLink(selectedApplicant.profiles.resume_url);
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            setPdfBlobUrl(blobUrl);
+          } catch (err) {
+            console.error('Failed to fetch PDF blob:', err);
+            // Fallback: use direct URL with toolbar=0
+            setPdfBlobUrl(getResumeEmbedLink(selectedApplicant.profiles.resume_url));
+          }
+        })();
+      }
+    } else {
+      // Clean up blob URL when modal closes
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+        setPdfBlobUrl(null);
+      }
+    }
+  }, [isModalOpen, selectedApplicant]);
 
   const getInitials = (name: string) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
 
@@ -831,10 +898,15 @@ export default function ApplicantsPage() {
                       </div>
 
                                         <div className="flex items-center gap-2 w-full sm:w-auto justify-end pl-0 sm:pl-4 sm:border-l sm:border-slate-100 flex-wrap">
+                        {/* 🔒 VIEW ONLY — opens modal, no direct download link */}
                         {applicant.profiles?.resume_url ? (
-                          <a href={getResumeLink(applicant.profiles.resume_url)} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-all transform active:scale-95">
-                            View Latest Resume
-                          </a>
+                          <button 
+                            onClick={() => openModal(applicant)}
+                            className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-all transform active:scale-95 flex items-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View Resume
+                          </button>
                         ) : (
                           <span className="px-3 py-1.5 text-xs font-semibold text-gray-400 bg-gray-100 rounded-md cursor-not-allowed">No Resume</span>
                         )}
@@ -994,24 +1066,54 @@ export default function ApplicantsPage() {
 
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
               <div>
+                {/* 🔒 View Only badge — tells the company downloads are disabled */}
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Resume / CV</h4>
-                  {selectedApplicant.profiles?.resume_url && (
-                    <a href={getResumeLink(selectedApplicant.profiles.resume_url)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline font-medium flex items-center gap-1">
-                      Open in New Tab
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                    </a>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    View Only — Download Disabled
+                  </span>
                 </div>
 
-                <div className="w-full bg-gray-100 rounded-lg border border-gray-200 overflow-hidden flex items-center justify-center" style={{ height: '70vh' }}>
+                <div
+                  className="w-full bg-gray-100 rounded-lg border border-gray-200 overflow-hidden flex items-center justify-center select-none"
+                  style={{ height: '70vh' }}
+                  onContextMenu={preventContextMenu}
+                >
                   {selectedApplicant.profiles?.resume_url ? (
                     getFileType(selectedApplicant.profiles.resume_url) === 'image' ? (
-                      <img src={getResumeLink(selectedApplicant.profiles.resume_url)} alt="Resume" className="max-w-full max-h-full object-contain" style={{ width: '100%', height: '100%' }} />
+                      <img
+                        src={getResumeLink(selectedApplicant.profiles.resume_url)}
+                        alt="Resume Preview"
+                        className="max-w-full max-h-full object-contain pointer-events-none"
+                        style={{ width: '100%', height: '100%' }}
+                        draggable={false}
+                        onContextMenu={preventContextMenu}
+                      />
                     ) : getFileType(selectedApplicant.profiles.resume_url) === 'pdf' ? (
-                      <iframe src={getResumeEmbedLink(selectedApplicant.profiles.resume_url)} className="w-full h-full bg-white border-0" title="Resume Preview" />
+                      // 🔒 PDF — blob URL bypasses download headers + #toolbar=0 hides buttons
+                      <iframe
+                        src={pdfBlobUrl ? `${pdfBlobUrl}#toolbar=0&navpanes=0` : getResumeEmbedLink(selectedApplicant.profiles.resume_url)}
+                        className="w-full h-full bg-white border-0"
+                        title="Resume Preview"
+                        onContextMenu={preventContextMenu}
+                      />
+                    ) : getFileType(selectedApplicant.profiles.resume_url) === 'document' ? (
+                      // 🔒 Word/Excel/PPT — Google Docs Viewer directly (NO blob — browser can't render .docx)
+                      <iframe
+                        src={getDocViewerLink(selectedApplicant.profiles.resume_url)}
+                        className="w-full h-full bg-white border-0"
+                        title="Document Preview"
+                        onContextMenu={preventContextMenu}
+                      />
                     ) : (
-                      <iframe src={getResumeLink(selectedApplicant.profiles.resume_url)} className="w-full h-full bg-white border-0" title="Resume Preview" />
+                      // 🔒 Unknown file type — Google Docs Viewer directly (NO blob)
+                      <iframe
+                        src={getDocViewerLink(selectedApplicant.profiles.resume_url)}
+                        className="w-full h-full bg-white border-0"
+                        title="File Preview"
+                        onContextMenu={preventContextMenu}
+                      />
                     )
                   ) : (
                     <div className="text-center p-4">

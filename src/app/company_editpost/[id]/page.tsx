@@ -1,0 +1,1412 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { LeafletMouseEvent } from 'leaflet';
+import Link from 'next/link';
+import { useRouter, useParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import 'leaflet/dist/leaflet.css';
+
+// IMPORT SUPABASE CLIENT
+import { createClient } from '@/utils/supabase/client';
+import CompanyNotificationBell from '@/components/CompanyNotificationBell';
+import CompanyChat from '@/components/CompanyChat';
+
+const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false });
+
+const useMapEvents = () => {
+  const { useMapEvents: _useMapEvents } = require('react-leaflet');
+  return _useMapEvents;
+};
+
+const useMap = () => {
+  const { useMap: _useMap } = require('react-leaflet');
+  return _useMap;
+};
+
+// Fix for default marker icons in Next.js/Webpack (client-only)
+function useLeafletIcons() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const L = require('leaflet');
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    });
+  }, []);
+}
+
+// Debounce Hook for Autocomplete
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+// Component to handle clicking on the map
+function LocationPicker({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
+  const _useMapEvents = useMapEvents();
+  _useMapEvents({
+    click(e: LeafletMouseEvent) {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
+// Component to move the map when search/GPS is used
+function MapController({ center }: { center: [number, number] }) {
+  const _useMap = useMap();
+  const map = _useMap();
+
+  useEffect(() => {
+    if (map) {
+      map.flyTo(center, map.getZoom());
+    }
+  }, [center, map]);
+
+  return null;
+}
+
+// ==========================================
+// CUSTOM SVG LOGO COMPONENT
+// ==========================================
+const OJTLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 40 40"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <defs>
+      <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#14b8a6" />
+        <stop offset="100%" stopColor="#059669" />
+      </linearGradient>
+      <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.2"/>
+      </filter>
+    </defs>
+
+    <path
+      d="M20 4C12.268 4 6 10.268 6 18C6 25.5 20 36 20 36C20 36 34 25.5 34 18C34 10.268 27.732 4 20 4Z"
+      fill="url(#logoGradient)"
+      filter="url(#shadow)"
+    />
+
+    <circle cx="20" cy="18" r="8" fill="white" opacity="0.95"/>
+
+    <path
+      d="M16 18L18.5 20.5L24 15"
+      stroke="url(#logoGradient)"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+
+    <circle cx="28" cy="10" r="3" fill="#fbbf24" />
+  </svg>
+);
+
+// ==========================================
+// SVG ICON COMPONENTS (No Emojis!)
+// ==========================================
+
+const CheckCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const XCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const AlertTriangleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+  </svg>
+);
+
+const LockIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+  </svg>
+);
+
+const CodeIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+  </svg>
+);
+
+const DesktopIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+  </svg>
+);
+
+const GraduationCapIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422L12 7.578l-6.16 3.422L12 14z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14v7m0 0l-3-3m3 3l3-3" />
+  </svg>
+);
+
+const DollarSignIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const GiftIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+  </svg>
+);
+
+const MapPinIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+const SaveIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+  </svg>
+);
+
+const CheckIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const ArrowLeftIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+  </svg>
+);
+
+export default function EditPostPage() {
+  const router = useRouter();
+  const params = useParams();
+  const postId = params?.id as string;
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // INITIALIZE SUPABASE CLIENT
+  const supabase = createClient();
+
+  // State Management
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [isLoadingPost, setIsLoadingPost] = useState(true);
+  const [postStatus, setPostStatus] = useState<string>('active'); // preserve current status
+
+  // Toast Notification System
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error' | 'warning';
+    message: string;
+  } | null>(null);
+
+  useLeafletIcons();
+
+  // ADD STATE FOR COMPANY DB ID
+  const [companyDbId, setCompanyDbId] = useState<string>('');
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [showChat, setShowChat] = useState(false);
+  // ===== Chat unread badge counts =====
+  const [studentUnread, setStudentUnread] = useState(0);
+  const [adminSupportUnread, setAdminSupportUnread] = useState(0);
+  const totalChatUnread = studentUnread + adminSupportUnread;
+
+  // Form State
+  const [formData, setFormData] = useState({
+    title: '',
+    companyName: '',
+    description: '',
+    skills: '',
+    location: '',
+    latitude: '',
+    longitude: '',
+    vacancies: '',
+    workType: 'On-site',
+    duration: '',
+    preferredCourse: '',
+    allowance: 'Paid'
+  });
+
+  // Local state for current skill input value
+  const [currentSkillInput, setCurrentSkillInput] = useState('');
+
+  // Map State - Default Center: Bacolod City
+  const [mapCenter, setMapCenter] = useState<[number, number]>([10.6633, 122.9661]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{display_name: string, lat: string, lon: string}>>([]);
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Map Layer State (Standard / Grey / Satellite)
+  const [mapLayer, setMapLayer] = useState<'standard' | 'grey' | 'satellite'>('standard');
+
+  // Debounce the search query by 600ms
+  const debouncedQuery = useDebounce(searchQuery, 600);
+
+  // FETCH COMPANY
+  useEffect(() => {
+    const fetchCompanyData = async () => {
+      try {
+        setIsLoadingProfile(true);
+
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        if (authError || !user) {
+          console.error('Not authenticated');
+          showNotification('error', 'You must be logged in.');
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('companies')
+          .select('id, company_name')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('DB Error:', error.message, error.hint, error.code);
+          if (error.code !== 'PGRST116') {
+            showNotification('error', `Database error: ${error.message}`);
+          }
+          return;
+        }
+
+        if (!data || !data.id) {
+          showNotification('warning', 'Company profile not found.');
+          setTimeout(() => router.push('/company_setup'), 1500);
+          return;
+        }
+
+        setCompanyDbId(data.id);
+        setAuthUserId(user.id);
+        setFormData(prev => ({ ...prev, companyName: data.company_name || 'Unnamed Company' }));
+      } catch (err) {
+        console.error('Fetch error:', err);
+        showNotification('error', err instanceof Error ? err.message : 'Failed to load company profile');
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    fetchCompanyData();
+  }, []);
+
+  // FETCH THE EXISTING POST DATA (only after we have companyDbId so we can verify ownership)
+  useEffect(() => {
+    const fetchPost = async () => {
+      if (!postId || !companyDbId) return;
+
+      try {
+        setIsLoadingPost(true);
+
+        const { data, error } = await supabase
+          .from('ojt_posts')
+          .select('*')
+          .eq('id', postId)
+          .eq('company_id', companyDbId) // SECURITY: only the owner can edit
+          .maybeSingle();
+
+        if (error) {
+          console.error('Post fetch error:', error.message);
+          showNotification('error', `Failed to load post: ${error.message}`);
+          return;
+        }
+
+        if (!data) {
+          showNotification('error', 'Post not found or you do not have permission to edit it.');
+          setTimeout(() => router.push('/company_ojtpost'), 1500);
+          return;
+        }
+
+        // Don't allow editing of offline (taken-down) posts
+        if (data.status?.toLowerCase() === 'offline' || data.status?.toLowerCase() === 'taken_down') {
+          showNotification('error', 'This post has been taken offline by the administrator and cannot be edited.');
+          setTimeout(() => router.push('/company_ojtpost'), 1500);
+          return;
+        }
+
+        setPostStatus(data.status || 'active');
+
+        // Convert skills array back to comma-separated string for the form
+        const skillsString = Array.isArray(data.skills)
+          ? data.skills.join(', ')
+          : (typeof data.skills === 'string' ? data.skills : '');
+
+        setFormData(prev => ({
+          ...prev,
+          title: data.title || '',
+          description: data.description || '',
+          skills: skillsString,
+          location: data.location_name || '',
+          latitude: data.latitude ? String(data.latitude) : '',
+          longitude: data.longitude ? String(data.longitude) : '',
+          vacancies: data.vacancies ? String(data.vacancies) : '',
+          workType: data.work_type || 'On-site',
+          duration: data.duration_hours ? String(data.duration_hours) : '',
+          preferredCourse: data.course_category || '',
+          allowance: data.allowance_type || 'Paid',
+        }));
+
+        // If post has coordinates, center the map on them
+        if (data.latitude && data.longitude) {
+          setMapCenter([parseFloat(data.latitude), parseFloat(data.longitude)]);
+        }
+
+        console.log('Post loaded for editing:', data.id);
+      } catch (err) {
+        console.error('Unexpected error fetching post:', err);
+        showNotification('error', 'Failed to load post data.');
+      } finally {
+        setIsLoadingPost(false);
+      }
+    };
+
+    fetchPost();
+  }, [postId, companyDbId]);
+
+  // Chat unread badge — 2 separate channels (student + admin support)
+  useEffect(() => {
+    if (!authUserId || !companyDbId) return;
+
+    const fetchStudentUnread = async () => {
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id')
+        .or(`participant_a.eq.${authUserId},participant_b.eq.${authUserId}`);
+      const convIds = (convs || []).map((c: any) => c.id);
+      if (convIds.length === 0) {
+        setStudentUnread(0);
+        return;
+      }
+      const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .in('conversation_id', convIds)
+        .neq('sender_id', authUserId)
+        .eq('is_read', false);
+      setStudentUnread(count || 0);
+    };
+
+    const fetchAdminSupportUnread = async () => {
+      const { count } = await supabase
+        .from('support_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyDbId)
+        .eq('sender_role', 'admin')
+        .eq('is_read', false);
+      setAdminSupportUnread(count || 0);
+    };
+
+    fetchStudentUnread();
+    fetchAdminSupportUnread();
+
+    const studentChannel = supabase
+      .channel(`student-unread:${authUserId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchStudentUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchStudentUnread)
+      .subscribe();
+
+    const adminSupportChannel = supabase
+      .channel(`admin-support-unread:${companyDbId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyDbId}` }, fetchAdminSupportUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyDbId}` }, fetchAdminSupportUnread)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(studentChannel);
+      supabase.removeChannel(adminSupportChannel);
+    };
+  }, [authUserId, companyDbId]);
+
+  const showNotification = (type: 'success' | 'error' | 'warning', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  // Handle input changes
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+
+    if (name === 'duration') {
+      const numValue = parseInt(value, 10);
+      if (numValue > 1500) return;
+      if (numValue < 0) return;
+    }
+
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (notification) setNotification(null);
+  };
+
+  // SKILL TAG INPUT — addSkill / removeSkill helpers
+  const addSkill = () => {
+    const value = currentSkillInput.trim();
+    if (!value) return;
+    const existing = formData.skills
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (existing.includes(value.toLowerCase())) {
+      setCurrentSkillInput('');
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      skills: prev.skills ? `${prev.skills}, ${value}` : value,
+    }));
+    setCurrentSkillInput('');
+  };
+
+  const removeSkillAtIndex = (index: number) => {
+    const skillsArray = formData.skills.split(',').filter(s => s.trim());
+    if (index < 0 || index >= skillsArray.length) return;
+    skillsArray.splice(index, 1);
+    setFormData(prev => ({ ...prev, skills: skillsArray.join(', ') }));
+  };
+
+  // Handle Map Click (Manual Pin Drop)
+  const handleMapClick = (lat: number, lng: number) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: lat.toFixed(6),
+      longitude: lng.toFixed(6),
+    }));
+  };
+
+  // Fetch function restricted to Negros Occidental
+  const fetchSearchResults = async (queryToFetch: string) => {
+    if (!queryToFetch.trim() || queryToFetch.trim().length < 3) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryToFetch)}&limit=5&viewbox=122.20,9.70,123.60,11.10&bounded=1&countrycodes=ph`
+      );
+      const data = await response.json();
+      setSearchResults(data);
+    } catch (error) {
+      console.error("Search error:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchSearchResults(debouncedQuery);
+  }, [debouncedQuery]);
+
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    fetchSearchResults(searchQuery);
+  };
+
+  const selectSearchResult = (result: {display_name: string, lat: string, lon: string}) => {
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
+    const cityName = result.display_name.split(',').slice(0, 2).join(',');
+
+    setFormData(prev => ({
+      ...prev,
+      location: cityName,
+      latitude: lat.toFixed(6),
+      longitude: lng.toFixed(6),
+    }));
+
+    setMapCenter([lat, lng]);
+    setSearchResults([]);
+    setSearchQuery('');
+  };
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      showNotification('error', "Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      const isWithinBounds = lat >= 9.70 && lat <= 11.10 && lng >= 122.20 && lng <= 123.60;
+
+      if (!isWithinBounds) {
+        showNotification('warning', "You are outside Negros Occidental. Please select a location within the province.");
+        setIsLocating(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+        const data = await response.json();
+        const locationName = data.address.city || data.address.town || data.address.village || data.address.county || "Current Location";
+
+        setFormData(prev => ({
+          ...prev,
+          location: locationName,
+          latitude: lat.toFixed(6),
+          longitude: lng.toFixed(6),
+        }));
+      } catch (error) {
+        setFormData(prev => ({
+          ...prev,
+          location: "My Location",
+          latitude: lat.toFixed(6),
+          longitude: lng.toFixed(6),
+        }));
+      }
+
+      setMapCenter([lat, lng]);
+      setIsLocating(false);
+    }, (error) => {
+      showNotification('error', "Unable to retrieve location. Please allow location access.");
+      setIsLocating(false);
+    });
+  };
+
+  // ============================================================
+  // SAVE CHANGES — UPDATE the existing post (NOT insert)
+  // ============================================================
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation (same as create)
+    const durationNum = parseInt(formData.duration, 10);
+    if (!durationNum || durationNum < 1 || durationNum > 1500) {
+      showNotification('error', "Please enter a valid duration between 1 and 1500 hours.");
+      return;
+    }
+
+    if (!formData.latitude || !formData.longitude) {
+      showNotification('error', "Please select a location on the map before saving.");
+      return;
+    }
+
+    if (!formData.title.trim()) {
+      showNotification('error', "Please enter an OJT title.");
+      return;
+    }
+
+    if (!formData.description.trim()) {
+      showNotification('error', "Please enter a job description.");
+      return;
+    }
+
+    if (!formData.preferredCourse) {
+      showNotification('error', "Please select a preferred course.");
+      return;
+    }
+
+    if (!companyDbId || !postId) {
+      showNotification('error', "Session error. Please refresh the page.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        throw new Error("You must be logged in to save changes.");
+      }
+
+      console.log('Updating post:', postId);
+
+      const skillsArray = formData.skills
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      const allowanceValue = formData.allowance;
+
+  const updatePayload = {
+  title: formData.title.trim(),
+  description: formData.description.trim(),
+  skills: skillsArray,
+
+  location_name: formData.location,
+  latitude: parseFloat(formData.latitude),
+  longitude: parseFloat(formData.longitude),
+  vacancies: parseInt(formData.vacancies) || 1,
+  work_type: formData.workType,
+  duration_hours: durationNum,
+  allowance_type: allowanceValue,
+  course_category: formData.preferredCourse,
+
+  // Keep the current status (active or paused).
+  // Do NOT touch created_at — Supabase will preserve it on UPDATE.
+};
+
+      console.log('Update Payload:', updatePayload);
+
+      // UPDATE — scoped to BOTH post id AND company_id (defence-in-depth
+      // against RLS edge cases so a company can never update another
+      // company's post even if the URL is guessed).
+      const { error: updateError } = await supabase
+        .from('ojt_posts')
+        .update(updatePayload)
+        .eq('id', postId)
+        .eq('company_id', companyDbId);
+
+      if (updateError) {
+        console.error("Update Error:", updateError);
+        throw new Error(updateError.message || "Failed to save changes");
+      }
+
+      showNotification('success', "OJT Post updated successfully!");
+
+      setTimeout(() => {
+        router.push('/company_ojtpost');
+      }, 1500);
+
+    } catch (err: any) {
+      console.error("Error:", err);
+      showNotification('error', err.message || "Something went wrong.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // LOADING STATE — covers both company profile + post load
+  if (isLoadingProfile || isLoadingPost) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-sans antialiased">
+        <aside className="fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 lg:translate-x-0">
+          <div className="p-6 border-b border-slate-100">
+            <Link href="/" className="flex items-center gap-2.5 text-xl font-bold text-slate-900">
+              <OJTLogo className="w-8 h-8" />
+              <span>OJTly</span>
+            </Link>
+          </div>
+          <nav className="p-4 space-y-1">
+            <Link href="/company_main" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium">Dashboard</Link>
+            <Link href="/company_ojtpost" className="flex items-center gap-3 px-4 py-3 text-white bg-teal-600 rounded-lg font-medium">My OJT Posts</Link>
+            <Link href="/company_createpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium">Create Post</Link>
+          </nav>
+        </aside>
+
+        <main className="lg:ml-64 min-h-screen">
+          <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 h-16">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
+              <h1 className="text-lg font-bold text-slate-800">Edit Post</h1>
+            </div>
+          </header>
+          <div className="p-8 flex items-center justify-center min-h-[50vh]">
+            <div className="text-center">
+              <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-slate-600 font-medium">Loading post...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans antialiased overflow-x-hidden">
+
+      {/* NOTIFICATION TOAST */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-[100] max-w-md animate-slide-in`}>
+          <div className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-lg border backdrop-blur-sm ${
+            notification.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : notification.type === 'warning'
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <span className="shrink-0 mt-0.5">
+              {notification.type === 'success' && <CheckCircleIcon className="w-5 h-5 text-emerald-600" />}
+              {notification.type === 'warning' && <AlertTriangleIcon className="w-5 h-5 text-amber-600" />}
+              {notification.type === 'error' && <XCircleIcon className="w-5 h-5 text-red-600" />}
+            </span>
+            <p className="text-sm font-medium flex-1">{notification.message}</p>
+            <button
+              onClick={() => setNotification(null)}
+              className="text-current opacity-40 hover:opacity-100 transition-opacity shrink-0"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      {/* --- Sidebar --- */}
+      <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 overflow-y-auto`}>
+        <div className="p-6 border-b border-slate-100">
+          <Link href="/" className="flex items-center gap-2.5 text-xl font-bold text-slate-900">
+            <OJTLogo className="w-8 h-8" />
+            <span>OJTly</span>
+          </Link>
+        </div>
+
+        <nav className="p-4 space-y-1">
+          <Link href="/company_main" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+            Dashboard
+          </Link>
+
+          <Link href="/company_ojtpost" className="flex items-center gap-3 px-4 py-3 text-white bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg font-medium shadow-sm shadow-teal-200">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            My OJT Posts
+          </Link>
+
+          <Link href="/company_createpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Create Post
+          </Link>
+
+          <Link href="/company_applicants" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            Applicants
+          </Link>
+
+          <Link href="/company_documents" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            Documents
+          </Link>
+
+          <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Settings
+          </Link>
+        </nav>
+
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100">
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg font-medium transition-colors w-full">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            Log out
+          </button>
+        </div>
+      </aside>
+
+      {/* --- Main Content --- */}
+      <main className="lg:ml-64 min-h-screen w-full lg:w-[calc(100%-16rem)]">
+
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 h-16 w-full">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-lg mr-2 shrink-0">
+                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
+              </button>
+              <button
+                onClick={() => router.push('/company_ojtpost')}
+                className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors shrink-0"
+                title="Back to My OJT Posts"
+              >
+                <ArrowLeftIcon className="w-5 h-5" />
+              </button>
+              <h1 className="text-lg font-bold text-slate-800 truncate">Edit Post</h1>
+            </div>
+            <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+              <span className="hidden sm:block text-sm text-slate-500 font-medium truncate max-w-[150px]">{formData.companyName || 'Company'}</span>
+              <CompanyNotificationBell companyId={companyDbId} userId={authUserId} />
+              <div className="w-9 h-9 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm border-2 border-white">
+                {formData.companyName.charAt(0)?.toUpperCase() || 'C'}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full">
+
+          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+
+            {/* Header */}
+            <div className="p-4 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-orange-50">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Edit OJT Opportunity</h2>
+                  <p className="text-sm text-slate-500 mt-1">Update the details below and save your changes.</p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-full border border-amber-200">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                  Editing Mode
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-6">
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">OJT Title <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  name="title"
+                  placeholder="e.g. Web Developer Intern"
+                  className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition ${
+                    notification?.type === 'error' && !formData.title ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                  }`}
+                  value={formData.title}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Company Name
+                </label>
+
+                <div className="relative rounded-xl border border-teal-300 bg-teal-50/50 overflow-hidden">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                    <CheckCircleIcon className="w-5 h-5 text-teal-600" />
+                  </div>
+
+                  <input
+                    type="text"
+                    value={formData.companyName}
+                    disabled
+                    readOnly
+                    className="w-full pl-11 pr-20 py-3 font-medium text-teal-800 bg-transparent outline-none cursor-not-allowed"
+                  />
+
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-teal-200 rounded-lg text-xs font-bold text-teal-700">
+                      <LockIcon className="w-3 h-3" />
+                      Locked
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-1.5 text-xs text-slate-400">Auto-filled from your account</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Description <span className="text-red-500">*</span></label>
+                <textarea
+                  name="description"
+                  rows={5}
+                  placeholder="Describe the internship role, responsibilities, and what the student will learn..."
+                  className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition resize-none ${
+                    notification?.type === 'error' && !formData.description ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                  }`}
+                  value={formData.description}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+
+                {/* SKILLS INPUT WITH TAGS */}
+                <div>
+                  <label className="flex items-center justify-between mb-2.5">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0L21 7.777M5.636 20.365l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                      Required Skills
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200">
+                      OPTIONAL
+                    </span>
+                  </label>
+
+                  <div className="relative">
+                    <div
+                      onClick={() => {
+                        const el = document.getElementById('skills-input') as HTMLInputElement | null;
+                        if (el) {
+                          el.focus();
+                          if (typeof el.click === 'function') el.click();
+                        }
+                      }}
+                      className={`min-h-[52px] w-full border-2 rounded-xl px-3 py-2.5 bg-white transition-all cursor-text flex flex-wrap items-center gap-2 ${
+                        formData.skills ? 'border-teal-300 ring-2 ring-teal-100' : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {formData.skills.split(',').filter(s => s.trim()).map((skill, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-50 to-emerald-50 text-teal-800 text-sm font-medium rounded-lg border border-teal-200 shadow-sm animate-fade-in"
+                        >
+                          <svg className="w-3.5 h-3.5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          {skill.trim()}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSkillAtIndex(index);
+                            }}
+                            className="ml-0.5 p-0.5 rounded-full hover:bg-teal-200/50 transition-colors group"
+                          >
+                            <svg className="w-3.5 h-3.5 text-teal-400 group-hover:text-teal-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} strokeLinecap="round"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      ))}
+
+                      <input
+                        id="skills-input"
+                        type="text"
+                        name="skills"
+                        inputMode="text"
+                        autoComplete="off"
+                        autoCapitalize="words"
+                        enterKeyHint="done"
+                        spellCheck={false}
+                        placeholder={!formData.skills ? 'Type a skill, then tap Add…' : 'Add another skill…'}
+                        value={currentSkillInput}
+                        onChange={(e) => setCurrentSkillInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          const isCommit =
+                            e.key === 'Enter' ||
+                            e.key === ',' ||
+                            e.key === 'Return' ||
+                            (e as any).keyCode === 13;
+                          if (isCommit) {
+                            e.preventDefault();
+                            addSkill();
+                            return;
+                          }
+                          if (e.key === 'Backspace' && !currentSkillInput && formData.skills) {
+                            removeSkillAtIndex(
+                              formData.skills.split(',').filter(s => s.trim()).length - 1
+                            );
+                          }
+                        }}
+                        onBlur={() => {
+                          if (currentSkillInput.trim()) addSkill();
+                        }}
+                        className="flex-1 min-w-[120px] sm:min-w-[140px] outline-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 py-1"
+                      />
+
+                      {currentSkillInput.trim() && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addSkill();
+                            setTimeout(() => {
+                              const el = document.getElementById('skills-input') as HTMLInputElement | null;
+                              el?.focus();
+                            }, 0);
+                          }}
+                          className="shrink-0 px-3 py-1 bg-teal-500 text-white rounded-lg text-xs font-bold hover:bg-teal-600 active:bg-teal-700 transition-colors shadow-sm"
+                          aria-label="Add skill"
+                        >
+                          Add
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-2 px-1">
+                      <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        Type a skill, then tap <strong className="font-semibold text-teal-600">Add</strong> (or press Enter)
+                      </p>
+                      {formData.skills && (
+                        <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md">
+                          {formData.skills.split(',').filter(s => s.trim()).length} skill{formData.skills.split(',').filter(s => s.trim()).length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Location <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    name="location"
+                    placeholder="Search or click map below"
+                    className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition ${
+                      notification?.type === 'error' && !formData.location ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                    }`}
+                    value={formData.location}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Latitude</label>
+                  <input
+                    type="text"
+                    name="latitude"
+                    placeholder="Auto-fills from map"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none transition"
+                    value={formData.latitude}
+                    readOnly
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Longitude</label>
+                  <input
+                    type="text"
+                    name="longitude"
+                    placeholder="Auto-fills from map"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none transition"
+                    value={formData.longitude}
+                    readOnly
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Number of Vacancies</label>
+                  <input
+                    type="number"
+                    name="vacancies"
+                    placeholder="e.g. 3"
+                    min="1"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition"
+                    value={formData.vacancies}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Work Type</label>
+                  <select
+                    name="workType"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-700 bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition appearance-none cursor-pointer"
+                    value={formData.workType}
+                    onChange={handleChange}
+                  >
+                    <option value="On-site">On-site</option>
+                    <option value="Remote">Remote</option>
+                    <option value="Hybrid">Hybrid</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Duration (Hours) <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    name="duration"
+                    placeholder="Min: 1, Max: 1500"
+                    min="1"
+                    max="1500"
+                    className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition ${
+                      notification?.type === 'error' && (!formData.duration || parseInt(formData.duration) < 1 || parseInt(formData.duration) > 1500) ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                    }`}
+                    value={formData.duration}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                {/* PREFERRED COURSE - SELECTABLE DROPDOWN */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Preferred Course <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="preferredCourse"
+                    value={formData.preferredCourse}
+                    onChange={handleChange}
+                    className={`w-full border rounded-xl px-4 py-3 text-slate-700 bg-white focus:ring-2 focus:border-transparent outline-none transition appearance-none cursor-pointer ${
+                      notification?.type === 'error' && !formData.preferredCourse ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                    }`}
+                    required
+                  >
+                    <option value="" disabled>Select course...</option>
+                    <option value="BSCS">BSCS - Bachelor of Science in Computer Science</option>
+                    <option value="BSIT">BSIT - Bachelor of Science in Information Technology</option>
+                    <option value="Both">Both BSCS & BSIT</option>
+                    <option value="Any IT Course">Any IT Related Course</option>
+                  </select>
+
+                  {formData.preferredCourse && (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {formData.preferredCourse === 'BSCS' && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200">
+                          <CodeIcon className="w-3.5 h-3.5" />
+                          BSCS
+                        </span>
+                      )}
+                      {formData.preferredCourse === 'BSIT' && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 text-xs font-bold rounded-lg border border-violet-200">
+                          <DesktopIcon className="w-3.5 h-3.5" />
+                          BSIT
+                        </span>
+                      )}
+                      {formData.preferredCourse === 'Both' && (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200">
+                            <CodeIcon className="w-3.5 h-3.5" />
+                            BSCS
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 text-xs font-bold rounded-lg border border-violet-200">
+                            <DesktopIcon className="w-3.5 h-3.5" />
+                            BSIT
+                          </span>
+                        </>
+                      )}
+                      {formData.preferredCourse === 'Any IT Course' && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg border border-green-200">
+                          <GraduationCapIcon className="w-3.5 h-3.5" />
+                          Any IT Course
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Allowance Field */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Allowance Type</label>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <label className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl cursor-pointer border-2 transition-all font-medium text-sm ${formData.allowance === 'Paid' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                      <input type="radio" name="allowance" value="Paid" checked={formData.allowance === 'Paid'} onChange={handleChange} className="sr-only" />
+                      {formData.allowance === 'Paid' ? <CheckIcon className="w-5 h-5 shrink-0 text-emerald-600" /> : <DollarSignIcon className="w-5 h-5 shrink-0 text-slate-400" />}
+                      <span>Paid / With Allowance</span>
+                    </label>
+                    <label className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl cursor-pointer border-2 transition-all font-medium text-sm ${formData.allowance === 'Unpaid' ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                      <input type="radio" name="allowance" value="Unpaid" checked={formData.allowance === 'Unpaid'} onChange={handleChange} className="sr-only" />
+                      {formData.allowance === 'Unpaid' ? <CheckIcon className="w-5 h-5 shrink-0 text-orange-600" /> : <GiftIcon className="w-5 h-5 shrink-0 text-slate-400" />}
+                      <span>Unpaid / Volunteer</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Embedded Map with Layer Switcher */}
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    <span className="inline-flex items-center gap-2">
+                      <MapPinIcon className="w-4 h-4 text-teal-600" />
+                      Pin Exact Location on Map
+                    </span>
+                    <span className="text-teal-600 font-normal ml-1">(Negros Occidental Only)</span>
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row gap-2 mb-2 w-full">
+                    <div className="flex flex-1 gap-2 w-full" role="search" aria-label="Search location">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSearch();
+                          }
+                        }}
+                        placeholder="Search places in Negros Occidental..."
+                        className="flex-1 min-w-0 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition"
+                      />
+                      <button type="button" onClick={() => handleSearch()} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition font-medium text-sm whitespace-nowrap shrink-0">
+                        Search
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLocateMe}
+                      disabled={isLocating}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                    >
+                      {isLocating ? (
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                          <circle cx="12" cy="12" r="4" strokeLinecap="round" strokeLinejoin="round" />
+                          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+                        </svg>
+                      )}
+                      <span className="sm:hidden">Locate</span>
+                      <span className="hidden sm:inline">Locate Me</span>
+                    </button>
+                  </div>
+
+                  {searchResults.length > 0 && (
+                    <div className="border border-slate-200 rounded-xl bg-white shadow-lg mb-2 max-h-48 overflow-y-auto z-20 relative">
+                      {searchResults.map((result, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => selectSearchResult(result)}
+                          className="w-full text-left px-4 py-3 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition text-sm text-slate-700 flex items-start gap-3"
+                        >
+                          <svg className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                          <span className="break-words">{result.display_name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* MAP CONTAINER WITH LAYER SWITCHER */}
+                  <div className={`border rounded-xl overflow-hidden shadow-sm relative w-full ${notification?.type === 'error' && (!formData.latitude || !formData.longitude) ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200'}`} style={{ minHeight: '350px', height: '400px', maxHeight: '500px' }}>
+
+                    {/* LAYER SWITCHER BUTTONS */}
+                    <div className="absolute top-3 right-3 z-[1000] flex gap-1.5 bg-white rounded-lg shadow-lg border border-slate-200 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setMapLayer('standard')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'standard' ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        Standard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapLayer('grey')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'grey' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        Grey
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapLayer('satellite')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'satellite' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        Satellite
+                      </button>
+                    </div>
+
+                    <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-10" style={{ width: '100%', height: '100%' }} scrollWheelZoom={true} zoomControl={true}>
+
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url={
+                          mapLayer === 'standard'
+                            ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                            : mapLayer === 'grey'
+                            ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+                            : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                        }
+                      />
+
+                      {mapLayer === 'satellite' && (
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                          url='https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png'
+                          zIndex={1000}
+                        />
+                      )}
+
+                      <MapController center={mapCenter} />
+                      <LocationPicker onMapClick={handleMapClick} />
+
+                      {formData.latitude && formData.longitude && (
+                        <Marker position={[parseFloat(formData.latitude), parseFloat(formData.longitude)]}></Marker>
+                      )}
+                    </MapContainer>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5 italic">* Click on the map or use search to pin your location</p>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="px-4 sm:px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => router.push('/company_ojtpost')}
+                disabled={isSubmitting}
+                className="px-6 py-3 border border-slate-300 text-slate-700 font-semibold rounded-xl hover:bg-slate-100 transition-all order-2 sm:order-1 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 order-1 sm:order-2 disabled:opacity-70 disabled:cursor-not-allowed min-w-[180px]"
+              >
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <SaveIcon className="w-5 h-5" />
+                    Save Changes
+                  </>
+                )}
+              </button>
+            </div>
+
+          </form>
+
+          {/* Info Box */}
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div className="text-sm text-amber-700">
+              <p className="font-semibold">Editing Mode</p>
+              <p className="mt-0.5">Your changes will <strong>immediately update</strong> the post visible to all students. The post's current status ({postStatus}) will be preserved.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <style jsx global>{`
+        @keyframes slide-in {
+          from { opacity: 0; transform: translateX(100%); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
+        @keyframes fade-in {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in { animation: fade-in 0.2s ease-out; }
+      `}</style>
+
+      {/* Floating Chat Bubble */}
+      {authUserId && (
+        <button
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center"
+          title={`Messages${totalChatUnread > 0 ? ` · ${totalChatUnread} unread` : ''}`}
+        >
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          {totalChatUnread > 0 && (
+            <>
+              <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-50"></span>
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md">
+                {totalChatUnread > 9 ? '9+' : totalChatUnread}
+              </span>
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Company Chat Modal */}
+      {showChat && authUserId && (
+        <CompanyChat
+          userId={authUserId}
+          companyName={formData.companyName || 'Company'}
+          onClose={() => setShowChat(false)}
+        />
+      )}
+    </div>
+  );
+}

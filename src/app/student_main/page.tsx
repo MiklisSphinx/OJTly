@@ -485,7 +485,7 @@ export default function StudentMainPage() {
           if (foundActiveOJT) setActiveOJTPostId(activePostId);
         }
 
-        const { data: postsData } = await supabase.from('ojt_posts').select(`*, companies(id, company_name, logo_url)`).eq('status', 'active').order('created_at', { ascending: false });
+        const { data: postsData } = await supabase.from('ojt_posts').select(`*, companies(id, company_name, logo_url)`).neq('status', 'paused').order('created_at', { ascending: false });
         if (postsData) setPosts(postsData);
       } else {
         setUser(null);

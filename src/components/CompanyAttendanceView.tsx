@@ -32,6 +32,10 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  // ✏️ Edit hours state
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editHoursValue, setEditHoursValue] = useState<string>('');
+  const [savingLogId, setSavingLogId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!companyId) return;
@@ -55,13 +59,6 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
       if (appsError) throw appsError;
 
       const studentIds = Array.from(new Set((apps || []).map((a: any) => a.student_id)));
-      // ⚠️ .eq('archived', false): CRITICAL — only show logs from the CURRENT
-      // OJT cycle. Without this filter, when a company accepts a student who
-      // previously finished an OJT elsewhere, the company instantly sees the
-      // student's OLD archived logs (from the previous OJT) as if they were
-      // attendance for THIS OJT — even though the student hasn't checked in yet.
-      // The archived=true logs belong to past OJTs and are read separately by
-      // the certificate generator.
       const { data: logs } = await supabase
         .from('attendance_logs')
         .select('id, student_id, log_date, hours_rendered, verification_status, distance_m')
@@ -112,7 +109,58 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Filter students by search query
+  // ✏️ Handle edit hours
+  const handleStartEdit = (log: AttendanceLog) => {
+    setEditingLogId(log.id);
+    setEditHoursValue(String(log.hours_rendered || 0));
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLogId(null);
+    setEditHoursValue('');
+  };
+
+  const handleSaveHours = async (logId: string) => {
+    const hours = parseInt(editHoursValue, 10);
+    if (isNaN(hours) || hours < 0 || hours > 24) {
+      alert('Please enter a valid number between 0 and 24');
+      return;
+    }
+
+    setSavingLogId(logId);
+    try {
+      const { data, error } = await supabase.rpc('update_attendance_hours', {
+        p_log_id: logId,
+        p_hours: hours,
+      });
+
+      if (error) throw error;
+
+      if (data === true) {
+        // Update local state immediately
+        setStudents(prev => prev.map(s => ({
+          ...s,
+          recent_logs: s.recent_logs.map(l =>
+            l.id === logId ? { ...l, hours_rendered: hours } : l
+          ),
+          total_hours: s.recent_logs
+            .filter(l => l.verification_status === 'verified')
+            .reduce((sum, l) => sum + (l.id === logId ? hours : (Number(l.hours_rendered) || 0)), 0),
+        })));
+        setEditingLogId(null);
+        setEditHoursValue('');
+        // Refresh to get accurate totals
+        loadData();
+      } else {
+        alert('Failed to update — log not found.');
+      }
+    } catch (err: any) {
+      alert('Error updating hours: ' + (err.message || 'Unknown error'));
+    } finally {
+      setSavingLogId(null);
+    }
+  };
+
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students;
     const q = searchQuery.toLowerCase();
@@ -160,11 +208,10 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
           </div>
           <div>
             <h3 className="font-bold text-base text-slate-800">Student Attendance</h3>
-            <p className="text-xs text-slate-500 mt-0.5">GPS-verified check-ins · {students.length} students</p>
+            <p className="text-xs text-slate-500 mt-0.5">GPS-verified check-ins · {students.length} students · ✏️ Editable hours</p>
           </div>
         </div>
 
-        {/* Search bar */}
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           <input
@@ -175,28 +222,18 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition"
           />
           {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
           )}
         </div>
-        {searchQuery && (
-          <p className="text-[10px] text-slate-400 mt-1.5">
-            Showing {filteredStudents.length} of {students.length} students
-          </p>
-        )}
       </div>
 
       <div className="divide-y divide-slate-100">
         {filteredStudents.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-sm text-slate-500">No students match "{searchQuery}"</p>
-            <button onClick={() => setSearchQuery('')} className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-semibold">
-              Clear search
-            </button>
+            <button onClick={() => setSearchQuery('')} className="mt-2 text-xs text-blue-600 hover:text-blue-700 font-semibold">Clear search</button>
           </div>
         ) : (
           filteredStudents.map(s => (
@@ -234,7 +271,10 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
 
               {expandedId === s.student_id && (
                 <div className="mt-4 pl-1 sm:pl-13 animate-fade-in">
-                  <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider mb-2">Recent Attendance (last 7 days)</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Recent Attendance (last 7 days)</p>
+                    <span className="text-[10px] text-slate-400">✏️ Click hours to edit</span>
+                  </div>
                   {s.recent_logs.length === 0 ? (
                     <p className="text-xs text-slate-400 italic py-3">No attendance logs yet.</p>
                   ) : (
@@ -251,7 +291,50 @@ export default function CompanyAttendanceView({ companyId, postId }: { companyId
                               <span className="text-slate-500 font-bold">{log.verification_status}</span>
                             )}
                             <span className="text-slate-400 hidden sm:inline">{fmtDistance(log.distance_m)}</span>
-                            <span className="text-slate-400">{log.hours_rendered || 0}h</span>
+
+                            {/* ✏️ EDITABLE HOURS — inline edit */}
+                            {editingLogId === log.id ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="24"
+                                  value={editHoursValue}
+                                  onChange={(e) => setEditHoursValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveHours(log.id);
+                                    if (e.key === 'Escape') handleCancelEdit();
+                                  }}
+                                  className="w-14 px-1.5 py-0.5 border border-teal-400 rounded-md text-xs text-center focus:ring-2 focus:ring-teal-500 outline-none"
+                                  autoFocus
+                                  disabled={savingLogId === log.id}
+                                />
+                                <span className="text-slate-400 text-[10px]">h</span>
+                                <button
+                                  onClick={() => handleSaveHours(log.id)}
+                                  disabled={savingLogId === log.id}
+                                  className="px-1.5 py-0.5 bg-emerald-500 text-white rounded-md text-[10px] font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                                >
+                                  {savingLogId === log.id ? '⏳' : '✓'}
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  disabled={savingLogId === log.id}
+                                  className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded-md text-[10px] font-bold hover:bg-slate-300 transition-colors"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleStartEdit(log); }}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md hover:bg-teal-100 transition-colors group"
+                                title="Click to edit hours"
+                              >
+                                <span className="text-slate-700 font-semibold group-hover:text-teal-600 transition-colors">{log.hours_rendered || 0}h</span>
+                                <svg className="w-2.5 h-2.5 text-slate-400 group-hover:text-teal-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}

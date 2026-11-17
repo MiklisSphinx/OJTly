@@ -141,6 +141,7 @@ export default function CompanyPostsPage() {
   const totalChatUnread = studentUnread + adminSupportUnread;
   const [companyRecordId, setCompanyRecordId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [pauseLoading, setPauseLoading] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error' | 'info' | 'warning';
     message: string;
@@ -263,6 +264,35 @@ const showNotification = (type: 'success' | 'error' | 'info' | 'warning', messag
     fetchPosts();
   }, []);
   
+  // ⏸️ PAUSE / ▶️ RESUME — toggles post status between 'active' and 'paused'
+  const handleTogglePause = async (postId: string, currentStatus: string) => {
+    const isPaused = currentStatus?.toLowerCase() === 'paused';
+    const newStatus = isPaused ? 'active' : 'paused';
+    const action = isPaused ? 'resumed' : 'paused';
+
+    if (!window.confirm(`Are you sure you want to ${action === 'paused' ? 'pause' : 'resume'} this post?${action === 'paused' ? '\n\nStudents will no longer be able to apply to this post until you resume it.' : ''}`)) {
+      return;
+    }
+
+    setPauseLoading(postId);
+    try {
+      const { error } = await supabase
+        .from('ojt_posts')
+        .update({ status: newStatus })
+        .eq('id', postId);
+
+      if (error) throw error;
+
+      // Update local state immediately
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, status: newStatus } : p));
+      showNotification('success', `Post ${action} successfully! ${isPaused ? 'Students can now apply again.' : 'Students can no longer apply.'}`);
+    } catch (err: any) {
+      showNotification('error', `Failed to ${action} post: ${err.message}`);
+    } finally {
+      setPauseLoading(null);
+    }
+  };
+
   const handleDelete = async (postId: string) => {
     console.log("Confirming Delete for Post ID:", postId);
 
@@ -318,6 +348,13 @@ const showNotification = (type: 'success' | 'error' | 'info' | 'warning', messag
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full bg-red-50 text-red-700 border border-red-200 animate-pulse">
             <AlertTriangleIcon className="w-3 h-3" />
             Offline
+          </span>
+        );
+      case 'paused':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Paused
           </span>
         );
       case 'closed':
@@ -500,6 +537,7 @@ const showNotification = (type: 'success' | 'error' | 'info' | 'warning', messag
   }
 
   const activePostsCount = posts.filter(p => p.status === 'active').length;
+  const pausedPostsCount = posts.filter(p => p.status === 'paused').length;
   const offlinePostsCount = posts.filter(p => p.status === 'offline').length;
 
   return (
@@ -605,6 +643,12 @@ const showNotification = (type: 'success' | 'error' | 'info' | 'warning', messag
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span className="text-emerald-600 font-semibold">{activePostsCount} Active</span>
                   </span>
+                  {pausedPostsCount > 0 && (
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                      <span className="text-amber-600 font-semibold">{pausedPostsCount} Paused</span>
+                    </span>
+                  )}
                   {offlinePostsCount > 0 && (
                     <span className="inline-flex items-center gap-1.5 text-sm">
                       <span className="w-2 h-2 rounded-full bg-red-500"></span>
@@ -763,7 +807,57 @@ const showNotification = (type: 'success' | 'error' | 'info' | 'warning', messag
                       )}
                     </button>
 
+                    
+
                     <div className="flex gap-1">
+
+                      
+                      {/* ⏸️ PAUSE / ▶️ RESUME button */}
+                      {!offline && (
+                        <button 
+                          onClick={() => handleTogglePause(post.id, post.status)}
+                          disabled={pauseLoading === post.id}
+                          className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${
+                            post.status?.toLowerCase() === 'paused'
+                              ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50'
+                              : 'text-amber-500 hover:text-amber-600 hover:bg-amber-50'
+                          }`}
+                          title={post.status?.toLowerCase() === 'paused' ? 'Resume Post' : 'Pause Post'}
+                        >
+                       {pauseLoading === post.id ? (
+  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+) : post.status?.toLowerCase() === 'paused' ? (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+) : (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+)}
+                        </button>
+                      )}
+
+                      {/* ✏️ EDIT button */}
+{!offline && (
+  <button
+    onClick={() => router.push(`/company_editpost/${post.id}`)}
+    className="p-2.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-all"
+    title="Edit Post"
+    aria-label="Edit Post"
+  >
+    <svg
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+      />
+    </svg>
+  </button>
+)}
+
                       <button 
                         onClick={() => handleDelete(post.id)}
                         disabled={deleteLoading === post.id}
