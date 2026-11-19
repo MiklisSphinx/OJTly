@@ -109,7 +109,7 @@ export default function AdminLogin() {
           <div className="flex justify-center mb-6">
             <div className="bg-gray-800 p-1 rounded-full flex gap-1 border border-gray-700 inline-flex">
               <Link href="/student/login" className="px-4 py-2 rounded-full text-gray-500 text-sm hover:text-white transition-all text-xs">User</Link>
-              <Link href="/company/login" className="px-4 py-2 rounded-full text-gray-500 text-sm hover:text-white transition-all text-xs">Company</Link>
+              <Link href="/company/login" className="px-4 py-2 rounded-full text-gray-500 text-sm hover:text-white transition-all text-xs">OJT Provider</Link>
               <Link href="/admin/login" className="px-4 py-2 rounded-full bg-red-600/20 text-red-400 border border-red-500/30 text-white text-xs font-semibold shadow-lg shadow-red-900/20">Admin</Link>
             </div>
           </div>
@@ -194,7 +194,7 @@ export default function AdminLogin() {
                 Not an admin?{" "}
                 <Link href="/student/login" className="text-blue-400 hover:underline font-medium">Student Login</Link>
                 {" | "}
-                <Link href="/company/login" className="text-blue-400 hover:underline font-medium">Company Login</Link>
+                <Link href="/company/login" className="text-blue-400 hover:underline font-medium">OJT Provider Login</Link>
               </p>
               <p className="text-xs text-gray-600">
                 New here?{" "}

@@ -10,6 +10,8 @@ import ChatPanel from '@/components/ChatPanel';
 import GeofenceCheckIn from '@/components/GeofenceCheckIn';
 import StudentAnalytics from '@/components/StudentAnalytics';
 import StudentCertificate from '@/components/StudentCertificate';
+import SkillsInput from '@/components/SkillsInput';
+import DraggableChatButton from '@/components/DraggableChatButton';
 
 const STORAGE_BUCKETS = {
   AVATARS: 'avatars',
@@ -389,20 +391,31 @@ export default function ProfilePage() {
     }
   }, []);
 
-  const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      const newSkill = skillInput.trim();
-      if (newSkill && !skills.includes(newSkill)) {
-        const updatedSkills = [...skills, newSkill];
-        setSkills(updatedSkills);
-        setSkillInput('');
-        syncSkillsToDB(updatedSkills);
-      } else {
-        setSkillInput('');
-      }
-    }
-  };
+// Extracted so it can be called by Enter key, "Add" button, and onBlur
+const addSkill = () => {
+  const newSkill = skillInput.trim();
+  if (!newSkill) return;
+  if (skills.includes(newSkill)) {
+    setSkillInput('');
+    return;
+  }
+  const updatedSkills = [...skills, newSkill];
+  setSkills(updatedSkills);
+  setSkillInput('');
+  syncSkillsToDB(updatedSkills);
+};
+
+const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const isCommit =
+    e.key === 'Enter' ||
+    e.key === ',' ||
+    e.key === 'Return' ||
+    (e as any).keyCode === 13;
+  if (isCommit) {
+    e.preventDefault();
+    addSkill();
+  }
+};
 
   const handleRemoveSkill = (skillToRemove: string) => {
     const updatedSkills = skills.filter(s => s !== skillToRemove);
@@ -961,21 +974,48 @@ export default function ProfilePage() {
                     <span className="text-xs text-slate-400 italic py-1">No skills added yet</span>
                   )}
                 </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={skillInput}
-                    onChange={(e) => setSkillInput(e.target.value)}
-                    onKeyDown={handleAddSkill}
-                    placeholder="Type skill and press Enter..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-shadow placeholder:text-slate-400"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                </div>
+               <div className="flex gap-2 items-stretch">
+  <input
+    id="student-skill-input"
+    type="text"
+    inputMode="text"
+    autoComplete="off"
+    autoCapitalize="words"
+    enterKeyHint="done"
+    spellCheck={false}
+    value={skillInput}
+    onChange={(e) => setSkillInput(e.target.value)}
+    onKeyDown={handleAddSkill}
+    onBlur={() => { if (skillInput.trim()) addSkill(); }}
+    placeholder="Type a skill, then tap Add…"
+    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-shadow placeholder:text-slate-400"
+  />
+  {skillInput.trim() && (
+    <button
+      type="button"
+      onClick={() => {
+        addSkill();
+        setTimeout(() => {
+          const el = document.getElementById('student-skill-input') as HTMLInputElement | null;
+          el?.focus();
+        }, 0);
+      }}
+      className="shrink-0 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
+      aria-label="Add skill"
+    >
+      + Add
+    </button>
+  )}
+</div>
+
+<div className="flex items-center justify-between mt-1 ml-1">
+  <p className="text-[10px] text-slate-400">Type a skill, then tap <strong className="font-semibold text-blue-600">Add</strong> (or press Enter)</p>
+  {skills.length > 0 && (
+    <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">
+      {skills.length} skill{skills.length !== 1 ? 's' : ''}
+    </span>
+  )}
+</div>
                 <p className="text-[10px] text-slate-400 mt-1 ml-1">Used for matching OJT posts (KNN)</p>
               </div>
 
@@ -1431,61 +1471,21 @@ export default function ProfilePage() {
         }
       `}</style>
 
-      {user.id && (
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-1">
-          {(() => {
-            const canChat = progress.appStatus === 'accepted' && progress.company && progress.status !== 'Completed' && companyUserId;
-            const reason = !canChat
-              ? progress.status === 'Completed' ? 'Chat archived'
-              : progress.appStatus !== 'accepted' ? 'Not accepted yet'
-              : !companyUserId ? 'Loading...'
-              : 'Unavailable'
-              : '';
-
-            return (
-              <>
-                <button
-                  onClick={() => canChat && setShowChat(true)}
-                  disabled={!canChat}
-                  className={`w-14 h-14 rounded-full shadow-lg transition-all flex items-center justify-center relative ${
-                    canChat
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
-                  title={canChat ? `Message ${progress.company}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}` : reason}
-                >
-                  <svg className="w-7 h-7 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  {!canChat && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
-                      </svg>
-                    </span>
-                  )}
-                  {/* 🔴 Red badge + 🟢 blue pulsing ring when there are unread messages */}
-                  {canChat && chatUnread > 0 && (
-                    <>
-                      {/* Blue pulsing ring — matches the button color */}
-                      <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
-                      {/* Red badge with unread count */}
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md z-10">
-                        {chatUnread > 9 ? '9+' : chatUnread}
-                      </span>
-                    </>
-                  )}
-                </button>
-                {!canChat && (
-                  <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">
-                    {reason}
-                  </span>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
+     {user.id && (
+  <DraggableChatButton
+    onClick={() => setShowChat(true)}
+    unreadCount={chatUnread}
+    disabled={!(progress.appStatus === 'accepted' && progress.company && progress.status !== 'Completed' && companyUserId)}
+    title={`Message ${progress.company}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}`}
+    reason={
+      progress.status === 'Completed' ? 'Chat archived'
+      : progress.appStatus !== 'accepted' ? 'Not accepted yet'
+      : !companyUserId ? 'Loading...'
+      : 'Unavailable'
+    }
+    storageKey="student-profile-chat-pos"
+  />
+)}
 
       {showChat && user.id && companyUserId && (
         <ChatPanel

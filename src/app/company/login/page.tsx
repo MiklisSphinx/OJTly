@@ -234,7 +234,7 @@ export default function CompanyLogin() {
         <div className="absolute -bottom-8 left-20 w-72 h-72 bg-lime-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
 
         <div className="relative z-10 text-center text-white p-8">
-          <h1 className="text-4xl font-bold mb-4">Company Portal</h1>
+          <h1 className="text-4xl font-bold mb-4">OJT Provider Portal</h1>
           <p className="text-lg text-teal-100">Manage your listings and find talent.</p>
 
           <div className="mt-8 inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
@@ -255,15 +255,15 @@ export default function CompanyLogin() {
         <div className="w-full max-w-md space-y-8 mt-12 lg:mt-0">
 
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900">Company Sign In</h2>
-            <p className="text-gray-500 mt-2">Access your Company Dashboard</p>
+            <h2 className="text-3xl font-bold text-gray-900">OJT Provider Sign In</h2>
+            <p className="text-gray-500 mt-2">Access your OJT Provider Dashboard</p>
           </div>
 
           {/* Tabs */}
           <div className="flex justify-center">
             <div className="bg-gray-200/60 p-1 rounded-full flex gap-1 backdrop-blur-sm">
               <Link href="/student/login" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50 transition-all">Student</Link>
-              <Link href="/company/login" className="px-6 py-2 rounded-full bg-white shadow-sm text-teal-600 font-medium text-sm transition-all">Company</Link>
+              <Link href="/company/login" className="px-6 py-2 rounded-full bg-white shadow-sm text-teal-600 font-medium text-sm transition-all">OJT Provider</Link>
               <Link href="/admin/login" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50 transition-all">Admin</Link>
             </div>
           </div>
@@ -287,14 +287,14 @@ export default function CompanyLogin() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">OJT Provider Email</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-gray-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </span>
                   <input
                     type="email"
-                    placeholder="company@example.com"
+                    placeholder="OJTProvider@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
@@ -353,7 +353,7 @@ export default function CompanyLogin() {
                   </>
                 ) : (
                   <>
-                    Sign In as Company
+                    Sign In as OJT Provider
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4 4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 00-3-3h7a3 3 0 003 3v1"/>
                     </svg>
@@ -383,7 +383,7 @@ export default function CompanyLogin() {
               </div>
 
               <p className="text-center text-xs text-gray-400 italic">
-                🔒 For security, please use email/password for company accounts.
+                🔒 For security, please use email/password for company/OjtProvider accounts.
               </p>
             </form>
           </div>
@@ -391,13 +391,13 @@ export default function CompanyLogin() {
           <p className="text-center text-gray-600 pb-8">
             Don&apos;t have an account?{' '}
             <Link href="/company/register" className="font-semibold text-teal-600 hover:text-teal-700 hover:underline">
-              Register Your Company
+              Register Your OJT Provider
             </Link>
           </p>
 
           <p className="text-center text-xs text-gray-400 pb-4">
             Having trouble?{' '}
-            <Link href="/support" className="underline hover:text-teal-600">Contact Support</Link>
+            <Link href="" className="underline hover:text-teal-600">Contact Support</Link>
           </p>
         </div>
       </div>

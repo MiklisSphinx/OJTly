@@ -92,15 +92,15 @@ export default function AdminNotificationBell() {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   // -------- 1. get current user --------
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (active && data?.user) setUserId(data.user.id);
-      else setLoading(false);
-    })();
-    return () => { active = false; };
-  }, []);
+ useEffect(() => {
+  let active = true;
+  (async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (active && session?.user) setUserId(session.user.id);
+    else setLoading(false);
+  })();
+  return () => { active = false; };
+}, []);
 
   // -------- 2. fetch (re-runs when view or userId changes) --------
   const fetchNotifications = useCallback(async () => {
@@ -129,7 +129,13 @@ export default function AdminNotificationBell() {
     if (error) {
       console.error('AdminNotificationBell fetch error:', error.message);
     } else {
-      setNotifications((data ?? []) as Notification[]);
+      // Dedup by title + message + link_url (keep newest)
+const seen = new Map<string, Notification>();
+(data ?? []).forEach((n: Notification) => {
+  const key = `${n.title}|${n.message}|${n.link_url || ''}`;
+  if (!seen.has(key)) seen.set(key, n);
+});
+setNotifications(Array.from(seen.values()) as Notification[]);
     }
     setLoading(false);
     setSelected(new Set());

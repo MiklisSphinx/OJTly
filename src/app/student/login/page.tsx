@@ -169,7 +169,7 @@ export default function StudentLoginPage() {
           <div className="flex justify-center mb-6">
             <div className="bg-gray-200/60 p-1 rounded-full flex gap-1 backdrop-blur-sm inline-flex">
               <Link href="/student/login" className="px-6 py-2 rounded-full bg-white shadow-sm text-blue-600 font-medium text-sm transition-all">Student</Link>
-              <Link href="/company/login" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-gray-50 transition-all">Company</Link>
+              <Link href="/company/login" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-gray-50 transition-all">OJT Provider</Link>
               <Link href="/admin/login" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-gray-50 transition-all">Admin</Link>
             </div>
           </div>

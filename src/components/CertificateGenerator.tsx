@@ -75,13 +75,6 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
       const certMap: Record<string, any> = {};
       (certs || []).forEach((c: any) => { certMap[c.application_id] = c; });
 
-      // ✅ Per-application hours map (NOT per-student).
-      // Uses SECURITY DEFINER RPC `get_archived_hours_for_app(application_id)`
-      // which only counts archived=true attendance logs INSIDE the time window
-      // of THIS specific application (between this app's created_at and the
-      // next app's created_at, or now if it's the latest).
-      // This is what prevents the "16/16 cheat" bug where one OJT cycle's
-      // hours leaked into another cycle's certificate.
       const hoursMap: Record<string, number> = {};
       if (appIds.length > 0) {
         const promises = appIds.map(async (appId: string) => {
@@ -96,8 +89,6 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
         const company = Array.isArray(a.companies) ? a.companies[0] : a.companies;
         const post = Array.isArray(a.ojt_posts) ? a.ojt_posts[0] : a.ojt_posts;
         const cert = certMap[a.id];
-        // ✅ Required hours comes from ojt_posts.duration_hours (per-post)
-        // NOT from profiles.required_hours (which is null in the user's schema)
         const requiredHours = Number(post?.duration_hours) || 0;
         return {
           application_id: a.id,
@@ -138,7 +129,6 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ---------- Group certificates by student ----------
   interface StudentGroup {
     key: string;
     studentName: string;
@@ -159,7 +149,6 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
       }
       map[key].certs.push(app);
     }
-    // Sort students alphabetically by name
     return Object.values(map).sort((a, b) =>
       a.studentName.localeCompare(b.studentName, undefined, { sensitivity: 'base' })
     );
@@ -175,6 +164,23 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
       const verificationToken = crypto.randomUUID();
       const verifyUrl = `${window.location.origin}/verify/${verificationToken}`;
 
+      // ✅ PRE-FETCH QR CODE as base64 data URL — fixes "QR not scanning"
+      let qrDataUrl: string | null = null;
+      try {
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(verifyUrl)}`;
+        const response = await fetch(qrApiUrl);
+        const blob = await response.blob();
+        qrDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        console.log('✅ QR pre-fetched as data URL');
+      } catch (qrErr) {
+        console.warn('⚠️ QR fetch failed, will use text fallback:', qrErr);
+      }
+
       const pdfBlob = buildCertificatePDF({
         certificateNumber: certNum,
         studentName: app.student_name,
@@ -186,6 +192,7 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
         startDate: app.start_date,
         endDate: app.end_date,
         verifyUrl,
+        qrDataUrl,
       });
 
       let pdfUrl: string | null = null;
@@ -309,7 +316,6 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
             <h3 className="font-bold text-base text-slate-800">OJT Completion Certificates</h3>
             <p className="text-xs text-slate-500 mt-0.5">Issue verifiable PDF certificates with QR codes · {completedApps.length} completed · {groupedByStudent.length} student{groupedByStudent.length !== 1 ? 's' : ''}</p>
           </div>
-          {/* Expand/Collapse all buttons */}
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={expandAll}
@@ -336,13 +342,11 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
           const isCollapsed = collapsedStudents.has(group.key);
           return (
           <div key={group.key} className="p-4 sm:p-5">
-            {/* ============ Student Group Header (clickable) ============ */}
             <button
               onClick={() => toggleStudent(group.key)}
               className="flex items-center gap-3 mb-3 pb-3 border-b border-slate-100 w-full text-left hover:bg-slate-50/60 rounded-lg transition-colors -mx-1 px-1"
               aria-expanded={!isCollapsed}
             >
-              {/* Chevron icon */}
               <svg
                 className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}
                 fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -367,7 +371,6 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
               </div>
             </button>
 
-            {/* ============ Certificates for this student (conditionally rendered) ============ */}
             {!isCollapsed && (
             <div className="space-y-3 pl-3 sm:pl-5 ml-5 border-l-2 border-amber-100">
               {group.certs.map(app => (
@@ -424,93 +427,271 @@ export default function CertificateGenerator({ adminId }: { adminId: string }) {
   );
 }
 
+// ============================================================================
+// buildCertificatePDF — standalone function (OUTSIDE the component)
+// Generates a beautifully designed certificate PDF with:
+// - Warm cream background (clearly visible, not white)
+// - Triple border (navy + gold + navy)
+// - Gold corner ornaments
+// - Faint "OJTly" watermark
+// - Gold seal/medallion
+// - Pre-fetched QR code (via data URL — no CORS issues)
+// - Large readable bottom text
+// ============================================================================
+
 function buildCertificatePDF(opts: {
   certificateNumber: string; studentName: string; companyName: string; postTitle: string;
   course: string | null; hoursRendered: number; requiredHours: number;
   startDate: string | null; endDate: string | null; verifyUrl: string;
+  qrDataUrl?: string | null;
 }): Blob {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageWidth = 297, pageHeight = 210;
 
-  pdf.setDrawColor(30, 58, 138); pdf.setLineWidth(1.5);
-  pdf.rect(10, 10, pageWidth - 20, pageHeight - 20);
-  pdf.setLineWidth(0.5); pdf.setDrawColor(99, 102, 241);
-  pdf.rect(14, 14, pageWidth - 28, pageHeight - 28);
+  // Color palette — tuple types so spread works with jsPDF
+  const NAVY: [number, number, number] = [30, 58, 138];
+  const GOLD: [number, number, number] = [184, 134, 11];
+  const GOLD_LIGHT: [number, number, number] = [218, 165, 32];
+  const SLATE_DARK: [number, number, number] = [15, 23, 42];
+  const SLATE_MED: [number, number, number] = [51, 65, 85];
+  const SLATE_LIGHT: [number, number, number] = [71, 85, 105];
+  const WHITE: [number, number, number] = [255, 255, 255];
+  const LIGHT_GOLD_TINT: [number, number, number] = [255, 248, 220];
+  const CREAM: [number, number, number] = [245, 230, 200];
+  const CREAM_DARK: [number, number, number] = [235, 220, 185];
+  const WATERMARK: [number, number, number] = [225, 215, 190];
 
-  pdf.setFillColor(255, 215, 0);
-  pdf.circle(14, 14, 2.5, 'F'); pdf.circle(pageWidth - 14, 14, 2.5, 'F');
-  pdf.circle(14, pageHeight - 14, 2.5, 'F'); pdf.circle(pageWidth - 14, pageHeight - 14, 2.5, 'F');
+  // 1. CREAM BACKGROUND
+  pdf.setFillColor(...CREAM);
+  pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+  pdf.setFillColor(...CREAM_DARK);
+  pdf.rect(0, 0, pageWidth, 20, 'F');
+  pdf.rect(0, pageHeight - 20, pageWidth, 20, 'F');
 
-  pdf.setFillColor(30, 58, 138);
-  pdf.roundedRect(pageWidth / 2 - 18, 24, 36, 12, 2, 2, 'F');
-  pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16);
-  pdf.text('OJTly', pageWidth / 2, 32.5, { align: 'center' });
+  // 2. WATERMARK
+  pdf.setTextColor(...WATERMARK);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(160);
+  pdf.text('OJTly', pageWidth / 2, pageHeight / 2 + 30, { align: 'center' });
+  pdf.setFontSize(16);
+  pdf.setFont('helvetica', 'italic');
+  pdf.setTextColor(...CREAM_DARK);
+  pdf.text('• On-the-Job Training • Excellence • Verification •', pageWidth / 2, pageHeight / 2 - 50, { align: 'center' });
 
-  pdf.setTextColor(100, 116, 139); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
-  pdf.text('ON-THE-JOB TRAINING MANAGEMENT PLATFORM', pageWidth / 2, 42, { align: 'center' });
+  // 3. TRIPLE BORDER
+  pdf.setDrawColor(...NAVY); pdf.setLineWidth(3);
+  pdf.rect(8, 8, pageWidth - 16, pageHeight - 16);
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1.5);
+  pdf.rect(12, 12, pageWidth - 24, pageHeight - 24);
+  pdf.setDrawColor(...NAVY); pdf.setLineWidth(0.5);
+  pdf.rect(16, 16, pageWidth - 32, pageHeight - 32);
 
-  pdf.setDrawColor(99, 102, 241); pdf.setLineWidth(0.3);
-  pdf.line(pageWidth / 2 - 50, 46, pageWidth / 2 + 50, 46);
+  // 4. CORNER ORNAMENTS
+  const drawCornerOrnament = (x: number, y: number) => {
+    pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+    pdf.circle(x, y, 5, 'S');
+    pdf.setLineWidth(0.5);
+    pdf.circle(x, y, 3.5, 'S');
+    pdf.setFillColor(...GOLD_LIGHT);
+    pdf.circle(x, y, 2, 'F');
+    pdf.setFillColor(...NAVY);
+    pdf.circle(x, y, 0.8, 'F');
+  };
+  drawCornerOrnament(16, 16);
+  drawCornerOrnament(pageWidth - 16, 16);
+  drawCornerOrnament(16, pageHeight - 16);
+  drawCornerOrnament(pageWidth - 16, pageHeight - 16);
 
-  pdf.setTextColor(15, 23, 42); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(28);
-  pdf.text('Certificate of Completion', pageWidth / 2, 60, { align: 'center' });
+  // 5. LOGO BOX
+  const logoW = 50, logoH = 16;
+  const logoX = pageWidth / 2 - logoW / 2;
+  const logoY = 26;
+  pdf.setFillColor(...GOLD);
+  pdf.roundedRect(logoX - 1.5, logoY - 1.5, logoW + 3, logoH + 3, 2.5, 2.5, 'F');
+  pdf.setFillColor(...NAVY);
+  pdf.roundedRect(logoX, logoY, logoW, logoH, 2, 2, 'F');
+  pdf.setTextColor(...WHITE);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(22);
+  pdf.text('OJTly', pageWidth / 2, logoY + 11, { align: 'center' });
 
-  pdf.setFont('helvetica', 'italic'); pdf.setFontSize(11); pdf.setTextColor(100, 116, 139);
-  pdf.text('This is to certify that', pageWidth / 2, 70, { align: 'center' });
+  pdf.setTextColor(...SLATE_MED);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(10);
+  pdf.text('ON-THE-JOB TRAINING MANAGEMENT PLATFORM', pageWidth / 2, 49, { align: 'center' });
 
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(24); pdf.setTextColor(30, 58, 138);
-  pdf.text(opts.studentName, pageWidth / 2, 82, { align: 'center' });
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.8);
+  pdf.line(pageWidth / 2 - 65, 53, pageWidth / 2 + 65, 53);
+  pdf.setLineWidth(0.4);
+  pdf.line(pageWidth / 2 - 45, 54.5, pageWidth / 2 + 45, 54.5);
+
+  // 6. TITLE
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(36);
+  pdf.text('Certificate of Completion', pageWidth / 2, 68, { align: 'center' });
+
+  const titleY = 72;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+  pdf.line(pageWidth / 2 - 70, titleY, pageWidth / 2 - 10, titleY);
+  pdf.line(pageWidth / 2 + 10, titleY, pageWidth / 2 + 70, titleY);
+  pdf.setFillColor(...GOLD);
+  pdf.triangle(pageWidth / 2 - 4, titleY, pageWidth / 2 + 4, titleY, pageWidth / 2, titleY - 4, 'F');
+  pdf.triangle(pageWidth / 2 - 4, titleY, pageWidth / 2 + 4, titleY, pageWidth / 2, titleY + 4, 'F');
+
+  // 7. "This is to certify that"
+  pdf.setFont('helvetica', 'italic');
+  pdf.setFontSize(14);
+  pdf.setTextColor(...SLATE_MED);
+  pdf.text('This is to certify that', pageWidth / 2, 82, { align: 'center' });
+
+  // 8. STUDENT NAME
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(32);
+  pdf.setTextColor(...NAVY);
+  pdf.text(opts.studentName, pageWidth / 2, 94, { align: 'center' });
 
   const nameWidth = pdf.getTextWidth(opts.studentName);
-  pdf.setDrawColor(30, 58, 138); pdf.setLineWidth(0.5);
-  pdf.line(pageWidth / 2 - nameWidth / 2 - 5, 84, pageWidth / 2 + nameWidth / 2 + 5, 84);
+  const underlineHalf = Math.min(nameWidth / 2 + 10, 90);
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+  pdf.line(pageWidth / 2 - underlineHalf, 97, pageWidth / 2 + underlineHalf, 97);
+  pdf.setFillColor(...GOLD);
+  pdf.circle(pageWidth / 2 - underlineHalf, 97, 1, 'F');
+  pdf.circle(pageWidth / 2 + underlineHalf, 97, 1, 'F');
 
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.setTextColor(51, 65, 85);
-  pdf.text('has successfully completed On-the-Job Training at', pageWidth / 2, 94, { align: 'center' });
+  // 9. BODY TEXT
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(13);
+  pdf.setTextColor(...SLATE_MED);
+  pdf.text('has successfully completed On-the-Job Training at', pageWidth / 2, 106, { align: 'center' });
 
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(15, 23, 42);
-  pdf.text(opts.companyName, pageWidth / 2, 102, { align: 'center' });
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(18);
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.text(opts.companyName, pageWidth / 2, 114, { align: 'center' });
 
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.setTextColor(51, 65, 85);
-  pdf.text(`in the position of ${opts.postTitle}`, pageWidth / 2, 110, { align: 'center' });
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(13);
+  pdf.setTextColor(...SLATE_MED);
+  pdf.text(`in the position of ${opts.postTitle}`, pageWidth / 2, 122, { align: 'center' });
 
-  if (opts.course) pdf.text(`Course: ${opts.course}`, pageWidth / 2, 117, { align: 'center' });
-
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.setTextColor(30, 58, 138);
-  pdf.text(`Rendering ${opts.hoursRendered} hours of required ${opts.requiredHours} hours`, pageWidth / 2, 126, { align: 'center' });
-
-  const fmtDate = (iso: string | null) => { if (!iso) return '—'; return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }); };
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(100, 116, 139);
-  pdf.text(`Training Period: ${fmtDate(opts.startDate)} — ${fmtDate(opts.endDate)}`, pageWidth / 2, 133, { align: 'center' });
-
-  pdf.setDrawColor(15, 23, 42); pdf.setLineWidth(0.3);
-  pdf.line(50, 165, 110, 165); pdf.line(pageWidth - 110, 165, pageWidth - 50, 165);
-
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(15, 23, 42);
-  pdf.text('OJTly Administrator', 80, 170, { align: 'center' });
-  pdf.text(opts.companyName, pageWidth - 80, 170, { align: 'center' });
-
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 116, 139);
-  pdf.text(`Issued on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 80, 175, { align: 'center' });
-  pdf.text('Company Representative', pageWidth - 80, 175, { align: 'center' });
-
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 116, 139);
-  pdf.text(`Certificate No: ${opts.certificateNumber}`, 20, pageHeight - 18);
-  pdf.text(`Verify at: ${opts.verifyUrl}`, 20, pageHeight - 13);
-
-  try {
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(opts.verifyUrl)}`;
-    pdf.addImage(qrApiUrl, 'PNG', pageWidth - 35, pageHeight - 35, 18, 18);
-    pdf.setFontSize(7);
-    pdf.text('Scan to verify', pageWidth - 26, pageHeight - 14, { align: 'center' });
-  } catch {
-    pdf.setFontSize(7);
-    pdf.text('Scan to verify:', pageWidth - 35, pageHeight - 25);
-    pdf.text(opts.verifyUrl, pageWidth - 35, pageHeight - 20);
+  if (opts.course) {
+    pdf.setFontSize(12);
+    pdf.setTextColor(...SLATE_LIGHT);
+    pdf.text(`Course: ${opts.course}`, pageWidth / 2, 128, { align: 'center' });
   }
 
-  pdf.setFont('helvetica', 'italic'); pdf.setFontSize(7); pdf.setTextColor(148, 163, 184);
-  pdf.text('This certificate was electronically issued by the OJTly platform. Verify its authenticity by scanning the QR code or visiting the verification URL.', pageWidth / 2, pageHeight - 8, { align: 'center' });
+  // 10. HOURS BOX
+  const hoursBoxY = 136;
+  const hoursBoxW = 130, hoursBoxH = 16;
+  const hoursBoxX = pageWidth / 2 - hoursBoxW / 2;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.7);
+  pdf.setFillColor(...LIGHT_GOLD_TINT);
+  pdf.roundedRect(hoursBoxX, hoursBoxY, hoursBoxW, hoursBoxH, 2, 2, 'FD');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(15);
+  pdf.setTextColor(...NAVY);
+  pdf.text(`Rendering ${opts.hoursRendered} hours of required ${opts.requiredHours} hours`, pageWidth / 2, hoursBoxY + 10.5, { align: 'center' });
+
+  // 11. TRAINING PERIOD
+  const fmtDate = (iso: string | null) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(12);
+  pdf.setTextColor(...SLATE_LIGHT);
+  pdf.text(`Training Period: ${fmtDate(opts.startDate)} — ${fmtDate(opts.endDate)}`, pageWidth / 2, 160, { align: 'center' });
+
+  // 12. GOLD SEAL
+  const sealX = pageWidth / 2;
+  const sealY = 175;
+  const sealR = 11;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1.5);
+  pdf.setFillColor(...LIGHT_GOLD_TINT);
+  pdf.circle(sealX, sealY, sealR, 'FD');
+  pdf.setDrawColor(...NAVY); pdf.setLineWidth(0.8);
+  pdf.circle(sealX, sealY, sealR - 2, 'S');
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.5);
+  pdf.circle(sealX, sealY, sealR - 3, 'S');
+  pdf.setTextColor(...NAVY);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(9);
+  pdf.text('OJTly', sealX, sealY - 1, { align: 'center' });
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(5);
+  pdf.setTextColor(...GOLD);
+  pdf.text('VERIFIED', sealX, sealY + 4, { align: 'center' });
+  pdf.setTextColor(...GOLD);
+  pdf.setFontSize(10);
+  pdf.text('★', sealX - sealR - 4, sealY + 1, { align: 'center' });
+  pdf.text('★', sealX + sealR + 4, sealY + 1, { align: 'center' });
+
+  // 13. SIGNATURE LINES
+  const sigLineY = 175;
+  const leftSigX = 55;
+  const rightSigX = pageWidth - 55;
+  pdf.setDrawColor(...SLATE_DARK); pdf.setLineWidth(0.5);
+  pdf.line(leftSigX - 30, sigLineY, leftSigX + 30, sigLineY);
+  pdf.line(rightSigX - 30, sigLineY, rightSigX + 30, sigLineY);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(12);
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.text('OJTly Administrator', leftSigX, sigLineY + 6, { align: 'center' });
+  pdf.text(opts.companyName, rightSigX, sigLineY + 6, { align: 'center' });
+  pdf.setFont('helvetica', 'italic');
+  pdf.setFontSize(9);
+  pdf.setTextColor(...SLATE_LIGHT);
+  pdf.text(`Issued on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, leftSigX, sigLineY + 11, { align: 'center' });
+  pdf.text('Company Representative', rightSigX, sigLineY + 11, { align: 'center' });
+
+  // 14. BOTTOM BAR — large readable text
+  const bottomY = pageHeight - 12;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.7);
+  pdf.line(25, bottomY - 8, pageWidth - 25, bottomY - 8);
+  pdf.setLineWidth(0.3);
+  pdf.line(25, bottomY - 7, pageWidth - 25, bottomY - 7);
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(12);
+  pdf.setTextColor(...NAVY);
+  pdf.text(`Certificate No:`, 25, bottomY - 1);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.text(opts.certificateNumber, 70, bottomY - 1);
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(12);
+  pdf.setTextColor(...NAVY);
+  pdf.text('Scan QR to verify authenticity', pageWidth / 2, bottomY - 1, { align: 'center' });
+
+  // QR CODE — use pre-fetched data URL
+  if (opts.qrDataUrl) {
+    try {
+      pdf.addImage(opts.qrDataUrl, 'PNG', pageWidth - 35, bottomY - 20, 20, 20);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(...SLATE_LIGHT);
+      pdf.text('Scan', pageWidth - 25, bottomY + 2, { align: 'center' });
+    } catch (imgErr) {
+      console.warn('⚠️ addImage failed:', imgErr);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(...SLATE_LIGHT);
+      pdf.text('Scan to verify', pageWidth - 50, bottomY - 1);
+    }
+  } else {
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(...SLATE_LIGHT);
+    pdf.text('Scan to verify', pageWidth - 50, bottomY - 1);
+  }
+
+  // 15. FOOTER
+  pdf.setFont('helvetica', 'italic');
+  pdf.setFontSize(9);
+  pdf.setTextColor(...SLATE_LIGHT);
+  pdf.text('This certificate was electronically issued by the OJTly platform. Verify by scanning the QR code.', pageWidth / 2, pageHeight - 4, { align: 'center' });
 
   return pdf.output('blob');
 }

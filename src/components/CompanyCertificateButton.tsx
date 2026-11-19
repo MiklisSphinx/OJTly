@@ -31,10 +31,6 @@ export default function CompanyCertificateButton(props: Props) {
 
   const checkExisting = async () => {
     try {
-      // ✅ Check by student_id + post_id (NOT application_id).
-      // This is more robust because application_id can change if the
-      // application row is deleted + recreated. student_id + post_id
-      // uniquely identifies one OJT cycle.
       const { data } = await supabase
         .from('certificates')
         .select('id, certificate_number, pdf_url, issued_at')
@@ -52,10 +48,7 @@ export default function CompanyCertificateButton(props: Props) {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      // ✅ DOUBLE-CHECK: before generating, verify no cert already exists
-      // for this student + post. This prevents duplicate certs if the user
-      // clicks "Issue Certificate" multiple times quickly, or if the initial
-      // checkExisting() missed an existing cert (e.g. application_id mismatch).
+      // Double-check: no duplicate cert
       const { data: existingCert } = await supabase
         .from('certificates')
         .select('id, certificate_number, pdf_url, issued_at')
@@ -64,43 +57,63 @@ export default function CompanyCertificateButton(props: Props) {
         .maybeSingle();
 
       if (existingCert) {
-        // A cert already exists — don't create a duplicate. Just download it.
         setCertificate(existingCert);
-        if (existingCert.pdf_url) {
-          window.open(existingCert.pdf_url, '_blank');
-        }
-        alert(`Certificate ${existingCert.certificate_number} already exists for this student. Opening the existing one instead of creating a duplicate.`);
+        if (existingCert.pdf_url) window.open(existingCert.pdf_url, '_blank');
+        alert(`Certificate ${existingCert.certificate_number} already exists. Opening the existing one.`);
         return;
       }
 
-      // 1) Get certificate number
+      // 1) Certificate number
       const { data: certNum, error: numError } = await supabase.rpc('next_certificate_number');
       if (numError || !certNum) throw numError || new Error('No cert number');
 
-      // 2) Generate verification token + URL
+      // 2) Verification token + URL
       const verificationToken = crypto.randomUUID();
       const verifyUrl = `${window.location.origin}/verify/${verificationToken}`;
 
-      // 3) Fetch student's verified attendance hours for THIS OJT cycle only.
-      //    ✅ Uses get_archived_hours_for_app (NOT get_archived_hours) which
-      //    filters by the application's created_at boundary. This prevents
-      //    the "cheat" bug where a student who did 2 OJTs (8h each) would
-      //    get a cert showing 16h (sum of BOTH OJTs). Now it only counts
-      //    logs from the CURRENT application's OJT cycle.
-      const { data: rpcHours, error: rpcError } = await supabase
-        .rpc('get_archived_hours_for_app', { p_application_id: props.applicationId });
-
-      let hoursRendered: number;
-      if (rpcError) {
-        console.warn('⚠️ get_archived_hours_for_app RPC failed, using requiredHours as fallback:', rpcError.message);
-        hoursRendered = props.requiredHours;
-      } else {
-        hoursRendered = Number(rpcHours) || 0;
+      // 3) ✅ PRE-FETCH QR as data URL (fixes QR not scanning)
+      let qrDataUrl: string | null = null;
+      try {
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(verifyUrl)}`;
+        const response = await fetch(qrApiUrl);
+        const blob = await response.blob();
+        qrDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (qrErr) {
+        console.warn('⚠️ QR fetch failed:', qrErr);
       }
 
-      // 4) Build PDF
-      const pdfBlob = buildPDF({
-        certNum,
+      // 4) Get hours — fallback to ALL verified hours if archived = 0
+      let hoursRendered: number = 0;
+      try {
+        const { data: rpcHours } = await supabase
+          .rpc('get_archived_hours_for_app', { p_application_id: props.applicationId });
+        hoursRendered = Number(rpcHours) || 0;
+      } catch (e) {
+        console.warn('⚠️ archived hours RPC failed:', e);
+      }
+
+      // Fallback: if archived hours = 0, count ALL verified hours for this student
+      if (hoursRendered === 0) {
+        try {
+          const { data: allLogs } = await supabase
+            .from('attendance_logs')
+            .select('hours_rendered')
+            .eq('student_id', props.studentId)
+            .eq('verification_status', 'verified');
+          hoursRendered = (allLogs || []).reduce((s: number, r: any) => s + (Number(r.hours_rendered) || 0), 0);
+        } catch (e) {
+          console.warn('⚠️ fallback hours fetch failed:', e);
+        }
+      }
+
+      // 5) Build PDF with NEW DESIGN
+      const pdfBlob = buildCertificatePDF({
+        certificateNumber: certNum,
         studentName: props.studentName,
         companyName: props.companyName,
         postTitle: props.postTitle,
@@ -110,9 +123,10 @@ export default function CompanyCertificateButton(props: Props) {
         startDate: null,
         endDate: new Date().toISOString().slice(0, 10),
         verifyUrl,
+        qrDataUrl,
       });
 
-      // 5) Upload to storage
+      // 6) Upload to storage
       let pdfUrl: string | null = null;
       try {
         const filePath = `certificates/certificate-${certNum}.pdf`;
@@ -127,7 +141,7 @@ export default function CompanyCertificateButton(props: Props) {
         console.warn('⚠️ Upload failed:', e);
       }
 
-      // 6) Insert certificate row
+      // 7) Insert certificate row
       const { error: insErr } = await supabase.from('certificates').insert({
         certificate_number: certNum,
         verification_token: verificationToken,
@@ -150,19 +164,22 @@ export default function CompanyCertificateButton(props: Props) {
       });
       if (insErr) throw insErr;
 
-      // 7) Notify the student
+      // 8) ✅ ONLY 1 notification to student
       await supabase.from('notifications').insert({
         user_id: props.studentId,
-        title: 'Certificate Ready! 🎓',
-        message: `Your OJT completion certificate from ${props.companyName} is ready. Certificate No: ${certNum}. You can download it from your applications page.`,
+        title: 'Certificate Ready 🎓',
+        message: `Your certificate from ${props.companyName} is ready. Certificate No: ${certNum}`,
         type: 'certificate',
         is_read: false,
+        link_url: '/student_profile',
+        created_at: new Date().toISOString(),
+        deleted_at: null,
       });
 
-      // 8) Open PDF + refresh
+      // 9) Open PDF + refresh
       window.open(URL.createObjectURL(pdfBlob), '_blank');
       setCertificate({ certificate_number: certNum, pdf_url: pdfUrl, issued_at: new Date().toISOString() });
-      alert(`Certificate ${certNum} issued! The student has been notified.`);
+      alert(`Certificate ${certNum} issued!`);
     } catch (err: any) {
       const desc = [err?.message, err?.code && `code=${err.code}`].filter(Boolean).join(' | ');
       console.error('❌ Certificate error:', desc, err);
@@ -222,71 +239,226 @@ export default function CompanyCertificateButton(props: Props) {
   );
 }
 
-function buildPDF(opts: any): Blob {
+// ============================================================================
+// buildCertificatePDF — NEW DESIGN with cream bg, gold borders, seal, QR
+// ============================================================================
+
+function buildCertificatePDF(opts: {
+  certificateNumber: string; studentName: string; companyName: string; postTitle: string;
+  course: string | null; hoursRendered: number; requiredHours: number;
+  startDate: string | null; endDate: string | null; verifyUrl: string;
+  qrDataUrl?: string | null;
+}): Blob {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = 297, H = 210;
+  const pageWidth = 297, pageHeight = 210;
 
-  pdf.setDrawColor(30, 58, 138); pdf.setLineWidth(1.5);
-  pdf.rect(10, 10, W - 20, H - 20);
-  pdf.setLineWidth(0.5); pdf.setDrawColor(99, 102, 241);
-  pdf.rect(14, 14, W - 28, H - 28);
-  pdf.setFillColor(255, 215, 0);
-  pdf.circle(14, 14, 2.5, 'F'); pdf.circle(W - 14, 14, 2.5, 'F');
-  pdf.circle(14, H - 14, 2.5, 'F'); pdf.circle(W - 14, H - 14, 2.5, 'F');
+  const NAVY: [number, number, number] = [30, 58, 138];
+  const GOLD: [number, number, number] = [184, 134, 11];
+  const GOLD_LIGHT: [number, number, number] = [218, 165, 32];
+  const SLATE_DARK: [number, number, number] = [15, 23, 42];
+  const SLATE_MED: [number, number, number] = [51, 65, 85];
+  const SLATE_LIGHT: [number, number, number] = [71, 85, 105];
+  const WHITE: [number, number, number] = [255, 255, 255];
+  const LIGHT_GOLD_TINT: [number, number, number] = [255, 248, 220];
+  const CREAM: [number, number, number] = [245, 230, 200];
+  const CREAM_DARK: [number, number, number] = [235, 220, 185];
+  const WATERMARK: [number, number, number] = [225, 215, 190];
 
-  pdf.setFillColor(30, 58, 138);
-  pdf.roundedRect(W / 2 - 18, 24, 36, 12, 2, 2, 'F');
-  pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(16);
-  pdf.text('OJTly', W / 2, 32.5, { align: 'center' });
-  pdf.setTextColor(100, 116, 139); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
-  pdf.text('ON-THE-JOB TRAINING MANAGEMENT PLATFORM', W / 2, 42, { align: 'center' });
+  // 1. CREAM BACKGROUND
+  pdf.setFillColor(...CREAM);
+  pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+  pdf.setFillColor(...CREAM_DARK);
+  pdf.rect(0, 0, pageWidth, 20, 'F');
+  pdf.rect(0, pageHeight - 20, pageWidth, 20, 'F');
 
-  pdf.setTextColor(15, 23, 42); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(28);
-  pdf.text('Certificate of Completion', W / 2, 60, { align: 'center' });
-  pdf.setFont('helvetica', 'italic'); pdf.setFontSize(11); pdf.setTextColor(100, 116, 139);
-  pdf.text('This is to certify that', W / 2, 70, { align: 'center' });
+  // 2. WATERMARK
+  pdf.setTextColor(...WATERMARK);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(160);
+  pdf.text('OJTly', pageWidth / 2, pageHeight / 2 + 30, { align: 'center' });
+  pdf.setFontSize(16);
+  pdf.setFont('helvetica', 'italic');
+  pdf.setTextColor(...CREAM_DARK);
+  pdf.text('• On-the-Job Training • Excellence • Verification •', pageWidth / 2, pageHeight / 2 - 50, { align: 'center' });
 
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(24); pdf.setTextColor(30, 58, 138);
-  pdf.text(opts.studentName, W / 2, 82, { align: 'center' });
-  const nw = pdf.getTextWidth(opts.studentName);
-  pdf.setDrawColor(30, 58, 138); pdf.setLineWidth(0.5);
-  pdf.line(W / 2 - nw / 2 - 5, 84, W / 2 + nw / 2 + 5, 84);
+  // 3. TRIPLE BORDER
+  pdf.setDrawColor(...NAVY); pdf.setLineWidth(3);
+  pdf.rect(8, 8, pageWidth - 16, pageHeight - 16);
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1.5);
+  pdf.rect(12, 12, pageWidth - 24, pageHeight - 24);
+  pdf.setDrawColor(...NAVY); pdf.setLineWidth(0.5);
+  pdf.rect(16, 16, pageWidth - 32, pageHeight - 32);
 
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.setTextColor(51, 65, 85);
-  pdf.text('has successfully completed On-the-Job Training at', W / 2, 94, { align: 'center' });
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.setTextColor(15, 23, 42);
-  pdf.text(opts.companyName, W / 2, 102, { align: 'center' });
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11); pdf.setTextColor(51, 65, 85);
-  pdf.text(`in the position of ${opts.postTitle}`, W / 2, 110, { align: 'center' });
-  if (opts.course) pdf.text(`Course: ${opts.course}`, W / 2, 117, { align: 'center' });
+  // 4. CORNER ORNAMENTS
+  const drawCornerOrnament = (x: number, y: number) => {
+    pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+    pdf.circle(x, y, 5, 'S');
+    pdf.setLineWidth(0.5);
+    pdf.circle(x, y, 3.5, 'S');
+    pdf.setFillColor(...GOLD_LIGHT);
+    pdf.circle(x, y, 2, 'F');
+    pdf.setFillColor(...NAVY);
+    pdf.circle(x, y, 0.8, 'F');
+  };
+  drawCornerOrnament(16, 16);
+  drawCornerOrnament(pageWidth - 16, 16);
+  drawCornerOrnament(16, pageHeight - 16);
+  drawCornerOrnament(pageWidth - 16, pageHeight - 16);
 
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13); pdf.setTextColor(30, 58, 138);
-  pdf.text(`Rendering ${opts.hoursRendered} hours of required ${opts.requiredHours} hours`, W / 2, 126, { align: 'center' });
+  // 5. LOGO BOX
+  const logoW = 50, logoH = 16;
+  const logoX = pageWidth / 2 - logoW / 2;
+  const logoY = 26;
+  pdf.setFillColor(...GOLD);
+  pdf.roundedRect(logoX - 1.5, logoY - 1.5, logoW + 3, logoH + 3, 2.5, 2.5, 'F');
+  pdf.setFillColor(...NAVY);
+  pdf.roundedRect(logoX, logoY, logoW, logoH, 2, 2, 'F');
+  pdf.setTextColor(...WHITE);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(22);
+  pdf.text('OJTly', pageWidth / 2, logoY + 11, { align: 'center' });
 
-  const fmt = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(100, 116, 139);
-  pdf.text(`Training Period: ${fmt(opts.startDate)} — ${fmt(opts.endDate)}`, W / 2, 133, { align: 'center' });
+  pdf.setTextColor(...SLATE_MED);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(10);
+  pdf.text('ON-THE-JOB TRAINING MANAGEMENT PLATFORM', pageWidth / 2, 49, { align: 'center' });
 
-  pdf.setDrawColor(15, 23, 42); pdf.setLineWidth(0.3);
-  pdf.line(50, 165, 110, 165); pdf.line(W - 110, 165, W - 50, 165);
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(15, 23, 42);
-  pdf.text('OJTly Platform', 80, 170, { align: 'center' });
-  pdf.text(opts.companyName, W - 80, 170, { align: 'center' });
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(100, 116, 139);
-  pdf.text(`Issued on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, 80, 175, { align: 'center' });
-  pdf.text('Company Representative', W - 80, 175, { align: 'center' });
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.8);
+  pdf.line(pageWidth / 2 - 65, 53, pageWidth / 2 + 65, 53);
+  pdf.setLineWidth(0.4);
+  pdf.line(pageWidth / 2 - 45, 54.5, pageWidth / 2 + 45, 54.5);
 
-  pdf.setFontSize(8); pdf.setTextColor(100, 116, 139);
-  pdf.text(`Certificate No: ${opts.certNum}`, 20, H - 18);
-  pdf.text(`Verify at: ${opts.verifyUrl}`, 20, H - 13);
+  // 6. TITLE
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(36);
+  pdf.text('Certificate of Completion', pageWidth / 2, 68, { align: 'center' });
 
-  try {
-    pdf.addImage(`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(opts.verifyUrl)}`, 'PNG', W - 35, H - 35, 18, 18);
-    pdf.setFontSize(7); pdf.text('Scan to verify', W - 26, H - 14, { align: 'center' });
-  } catch {}
+  const titleY = 72;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+  pdf.line(pageWidth / 2 - 70, titleY, pageWidth / 2 - 10, titleY);
+  pdf.line(pageWidth / 2 + 10, titleY, pageWidth / 2 + 70, titleY);
+  pdf.setFillColor(...GOLD);
+  pdf.triangle(pageWidth / 2 - 4, titleY, pageWidth / 2 + 4, titleY, pageWidth / 2, titleY - 4, 'F');
+  pdf.triangle(pageWidth / 2 - 4, titleY, pageWidth / 2 + 4, titleY, pageWidth / 2, titleY + 4, 'F');
 
-  pdf.setFont('helvetica', 'italic'); pdf.setFontSize(7); pdf.setTextColor(148, 163, 184);
-  pdf.text('This certificate was electronically issued by the OJTly platform.', W / 2, H - 8, { align: 'center' });
+  // 7. "This is to certify that"
+  pdf.setFont('helvetica', 'italic');
+  pdf.setFontSize(14);
+  pdf.setTextColor(...SLATE_MED);
+  pdf.text('This is to certify that', pageWidth / 2, 82, { align: 'center' });
+
+  // 8. STUDENT NAME
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(32);
+  pdf.setTextColor(...NAVY);
+  pdf.text(opts.studentName, pageWidth / 2, 94, { align: 'center' });
+
+  const nameWidth = pdf.getTextWidth(opts.studentName);
+  const underlineHalf = Math.min(nameWidth / 2 + 10, 90);
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+  pdf.line(pageWidth / 2 - underlineHalf, 97, pageWidth / 2 + underlineHalf, 97);
+  pdf.setFillColor(...GOLD);
+  pdf.circle(pageWidth / 2 - underlineHalf, 97, 1, 'F');
+  pdf.circle(pageWidth / 2 + underlineHalf, 97, 1, 'F');
+
+  // 9. BODY TEXT
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(13);
+  pdf.setTextColor(...SLATE_MED);
+  pdf.text('has successfully completed On-the-Job Training at', pageWidth / 2, 106, { align: 'center' });
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(18);
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.text(opts.companyName, pageWidth / 2, 114, { align: 'center' });
+
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(13);
+  pdf.setTextColor(...SLATE_MED);
+  pdf.text(`in the position of ${opts.postTitle}`, pageWidth / 2, 122, { align: 'center' });
+
+  if (opts.course) {
+    pdf.setFontSize(12);
+    pdf.setTextColor(...SLATE_LIGHT);
+    pdf.text(`Course: ${opts.course}`, pageWidth / 2, 128, { align: 'center' });
+  }
+
+  // 10. HOURS BOX
+  const hoursBoxY = 136;
+  const hoursBoxW = 130, hoursBoxH = 16;
+  const hoursBoxX = pageWidth / 2 - hoursBoxW / 2;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.7);
+  pdf.setFillColor(...LIGHT_GOLD_TINT);
+  pdf.roundedRect(hoursBoxX, hoursBoxY, hoursBoxW, hoursBoxH, 2, 2, 'FD');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(15);
+  pdf.setTextColor(...NAVY);
+  pdf.text(`Rendering ${opts.hoursRendered} hours of required ${opts.requiredHours} hours`, pageWidth / 2, hoursBoxY + 10.5, { align: 'center' });
+
+   // 11. TRAINING PERIOD
+  const fmtDate = (iso: string | null) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(12);
+  pdf.setTextColor(...SLATE_LIGHT);
+  pdf.text(`Training Period: ${fmtDate(opts.startDate)} — ${fmtDate(opts.endDate)}`, pageWidth / 2, 156, { align: 'center' });
+
+  // 12. SIGNATURE LINES — at y=172, NO seal in the middle
+  const sigLineY = 172;
+  const leftSigX = 85;
+  const rightSigX = pageWidth - 85;
+  pdf.setDrawColor(...SLATE_DARK); pdf.setLineWidth(0.5);
+  pdf.line(leftSigX - 30, sigLineY, leftSigX + 30, sigLineY);
+  pdf.line(rightSigX - 30, sigLineY, rightSigX + 30, sigLineY);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(12);
+  pdf.setTextColor(...SLATE_DARK);
+  pdf.text('OJTly Administrator', leftSigX, sigLineY + 6, { align: 'center' });
+  pdf.text(opts.companyName, rightSigX, sigLineY + 6, { align: 'center' });
+  pdf.setFont('helvetica', 'italic');
+  pdf.setFontSize(9);
+  pdf.setTextColor(...SLATE_LIGHT);
+  pdf.text(`Issued ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, leftSigX, sigLineY + 11, { align: 'center' });
+  pdf.text('Company Representative', rightSigX, sigLineY + 11, { align: 'center' });
+
+  // 13. SMALL GOLD SEAL — centered below signatures, smaller (radius 7)
+  const sealX = pageWidth / 2;
+  const sealY = 178;
+  const sealR = 7;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(1);
+  pdf.setFillColor(...LIGHT_GOLD_TINT);
+  pdf.circle(sealX, sealY, sealR, 'FD');
+  pdf.setDrawColor(...NAVY); pdf.setLineWidth(0.5);
+  pdf.circle(sealX, sealY, sealR - 1.5, 'S');
+  pdf.setTextColor(...NAVY);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(6);
+  pdf.text('OJTly', sealX, sealY - 0.5, { align: 'center' });
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(3.5);
+  pdf.setTextColor(...GOLD);
+  pdf.text('VERIFIED', sealX, sealY + 2.5, { align: 'center' });
+
+  // 14. BOTTOM BAR — certificate number only, NO QR
+  const bottomY = 188;
+  pdf.setDrawColor(...GOLD); pdf.setLineWidth(0.7);
+  pdf.line(25, bottomY - 4, pageWidth - 25, bottomY - 4);
+  pdf.setLineWidth(0.3);
+  pdf.line(25, bottomY - 3, pageWidth - 25, bottomY - 3);
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(11);
+  pdf.setTextColor(...NAVY);
+  pdf.text(`Certificate No: ${opts.certificateNumber}`, pageWidth / 2, bottomY, { align: 'center' });
+
+  // 15. FOOTER
+  pdf.setFont('helvetica', 'italic');
+  pdf.setFontSize(8);
+  pdf.setTextColor(...SLATE_LIGHT);
+  pdf.text('Electronically issued by OJTly platform — verify at ojtly.vercel.app', pageWidth / 2, 192, { align: 'center' });
 
   return pdf.output('blob');
 }

@@ -271,7 +271,7 @@ export default function UserRegister() {
           <div className="flex justify-center">
             <div className="bg-gray-100 p-1 rounded-full flex gap-1">
               <Link href="/user/register" className="px-6 py-2 rounded-full bg-white shadow-sm text-blue-600 font-medium text-sm">User</Link>
-              <Link href="/company/register" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50">Company</Link>
+              <Link href="/company/register" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50">OJT Provider</Link>
               <Link href="/admin/register" className="px-6 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50">Admin</Link>
             </div>
           </div>

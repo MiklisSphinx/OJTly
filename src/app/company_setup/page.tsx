@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import DraggableChatButton from '@/components/DraggableChatButton';
 
 // ==========================================
 // SVG ICON COMPONENTS

@@ -184,7 +184,7 @@ export default function AdminRegister() {
           <div className="flex justify-center">
             <div className="bg-zinc-900 p-1 rounded-full flex gap-1 border border-zinc-800">
               <Link href="/student/register" className="px-5 py-2 rounded-full text-zinc-500 font-medium text-sm hover:text-white hover:bg-zinc-800 transition-all">User</Link>
-              <Link href="/company/register" className="px-5 py-2 rounded-full text-zinc-500 font-medium text-sm hover:text-white hover:bg-zinc-800 transition-all">Company</Link>
+              <Link href="/company/register" className="px-5 py-2 rounded-full text-zinc-500 font-medium text-sm hover:text-white hover:bg-zinc-800 transition-all">OJT Provider</Link>
               <Link href="/admin/register" className="px-5 py-2 rounded-full bg-zinc-800 text-white shadow-sm font-medium text-sm border border-zinc-700 transition-all">Admin</Link>
             </div>
           </div>

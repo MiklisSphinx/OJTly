@@ -451,15 +451,15 @@ Redirecting to login...
           
           {/* Header */}
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900">Company Registration</h2>
-            <p className="text-gray-500 mt-2 text-sm">Create your company profile</p>
+            <h2 className="text-3xl font-bold text-gray-900">Business Registration</h2>
+            <p className="text-gray-500 mt-2 text-sm">Create your Business profile</p>
           </div>
 
           {/* Role Tabs */}
           <div className="flex justify-center">
             <div className="bg-gray-200/60 p-1 rounded-full flex gap-1 backdrop-blur-sm inline-flex">
               <Link href="/student/register" className="px-5 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50 transition-all">User</Link>
-              <Link href="/company/register" className="px-5 py-2 rounded-full bg-white shadow-sm text-teal-600 font-medium text-sm transition-all">Company</Link>
+              <Link href="/company/register" className="px-5 py-2 rounded-full bg-white shadow-sm text-teal-600 font-medium text-sm transition-all">OJT Provider</Link>
               <Link href="/admin/register" className="px-5 py-2 rounded-full text-gray-600 font-medium text-sm hover:bg-white/50 transition-all">Admin</Link>
             </div>
           </div>
@@ -512,12 +512,12 @@ Redirecting to login...
             <div className="bg-white p-6 rounded-2xl shadow-lg shadow-gray-200/40 border border-gray-100 space-y-4">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
                 <svg className="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                Company Information
+                Business Information
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Company Name <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Business Name <span className="text-red-500">*</span></label>
                   <input type="text" name="companyName" value={formData.companyName} onChange={handleChange} placeholder="GlobalTech Solutions Inc." className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none transition" required disabled={isLoading} />
                 </div>
 
@@ -740,7 +740,7 @@ Redirecting to login...
 
             {/* Submit Button */}
             <button type="submit" disabled={isLoading} className={`w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}>
-              {isLoading ? (<><svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Processing...</>) : (<>Register Company<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg></>)}
+              {isLoading ? (<><svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Processing...</>) : (<>Register OJT Provider<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg></>)}
             </button>
           </form>
 

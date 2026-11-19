@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
 import NotificationBell from '@/components/NotificationBell';   // ← add this line
 import ChatPanel from '@/components/ChatPanel';
+import DraggableChatButton from '@/components/DraggableChatButton';
 
 
 // ==========================================
@@ -1121,10 +1122,10 @@ export default function StudentMainPage() {
       {/* Navigation */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-lg border-b border-slate-200/80 h-14 sm:h-16">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-1.5 sm:gap-2.5 text-lg sm:text-xl font-bold text-slate-900">
-            <OJTLogo className="w-7 h-7 sm:w-8 sm:h-8" />
-            <span className="hidden xs:inline">OJTly</span>
-          </Link>
+         <div className="flex items-center gap-1.5 sm:gap-2.5 text-lg sm:text-xl font-bold text-slate-900 cursor-default">
+  <OJTLogo className="w-7 h-7 sm:w-8 sm:h-8" />
+  <span className="hidden xs:inline">OJTly</span>
+</div>
 
           <nav className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-full">
             <Link href="/student_main" className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium bg-white text-blue-600 rounded-full shadow-sm transition-all duration-200">Find OJT</Link>
@@ -1651,56 +1652,16 @@ export default function StudentMainPage() {
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
 
-      {/* 💬 Floating Chat Bubble — enabled when accepted */}
-      {currentUserId && (
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-1">
-          {(() => {
-            const canChat = hasActiveOJT && activeOJTCompany && companyUserId;
-            const reason = !canChat
-              ? !hasActiveOJT ? 'Not accepted yet'
-              : !companyUserId ? 'Loading...'
-              : 'Unavailable'
-              : '';
-            return (
-              <>
-                <button
-                  onClick={() => canChat && setShowChat(true)}
-                  disabled={!canChat}
-                  className={`w-14 h-14 rounded-full shadow-lg transition-all flex items-center justify-center relative ${
-                    canChat
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
-                  title={canChat ? `Message ${activeOJTCompany}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}` : reason}
-                >
-                  <svg className="w-7 h-7 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  {!canChat && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4" />
-                      </svg>
-                    </span>
-                  )}
-                  {/* 🔴 Red badge + 🔵 blue pulsing ring when there are unread messages */}
-                  {canChat && chatUnread > 0 && (
-                    <>
-                      <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 ring-2 ring-white shadow-md z-10">
-                        {chatUnread > 9 ? '9+' : chatUnread}
-                      </span>
-                    </>
-                  )}
-                </button>
-                {!canChat && (
-                  <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">{reason}</span>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
+    {currentUserId && (
+  <DraggableChatButton
+    onClick={() => setShowChat(true)}
+    unreadCount={chatUnread}
+    disabled={!(hasActiveOJT && activeOJTCompany && companyUserId)}
+    title={`Message ${activeOJTCompany}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}`}
+    reason={!hasActiveOJT ? 'Not accepted yet' : !companyUserId ? 'Loading...' : 'Unavailable'}
+    storageKey="student-main-chat-pos"
+  />
+)}
 
       {/* 💬 Chat Modal */}
       {showChat && currentUserId && companyUserId && (
