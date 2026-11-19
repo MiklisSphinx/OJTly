@@ -809,7 +809,7 @@ export default function MapPage() {
           if (prev.length === 0) return [[newLoc.lat, newLoc.lng]];
           const last = prev[prev.length - 1];
           const dist = haversineDistance(last[0], last[1], newLoc.lat, newLoc.lng) * 1000;
-          if (dist < 5) return prev;
+          if (dist < 2) return prev;
           return [...prev, [newLoc.lat, newLoc.lng]];
         });
       },
