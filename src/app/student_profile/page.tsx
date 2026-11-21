@@ -1,5 +1,20 @@
 'use client';
 
+// StudentProfile.patched.tsx  (DESTINATION: your student profile page, e.g.
+// src/app/student/profile/page.tsx — wherever ProfilePage lives.)
+//
+// Changes vs the version you pasted:
+//   1. Student ID is loaded from profiles.student_id and shown as the FIRST
+//      row of the Student Information card (read-only — it's the identity
+//      anchor for duplicate-account prevention, so it's not in the edit modal).
+//   2. Strand and Section are REMOVED everywhere: type, initial state, data
+//      mapping, the info card rows, the edit modal inputs, the save upsert
+//      payload, and the logout reset.
+//
+// Requires: student-duplicate-prevention.sql has been run (adds the
+// profiles.student_id column). The registration page (UserRegister.patched.tsx)
+// writes student_id at signUp time.
+
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,6 +27,7 @@ import StudentAnalytics from '@/components/StudentAnalytics';
 import StudentCertificate from '@/components/StudentCertificate';
 import SkillsInput from '@/components/SkillsInput';
 import DraggableChatButton from '@/components/DraggableChatButton';
+import { checkStudentDuplicate } from '@/lib/checkStudentDuplicate';
 
 const STORAGE_BUCKETS = {
   AVATARS: 'avatars',
@@ -21,12 +37,13 @@ const STORAGE_BUCKETS = {
 type UserProfile = {
   id?: string;
   name: string;
+  studentId: string;
+  createdAt: string | null; // registration timestamp — drives the 60-day Student ID deadline
   course: string;
   location: string;
   school: string;
   yearLevel: string;
-  strand: string;
-  section: string;
+  // strand + section REMOVED
   avatar: string | null;
   resumeUrl: string | null;
   resumeName: string;
@@ -58,12 +75,13 @@ export default function ProfilePage() {
 
   const [user, setUser] = useState<UserProfile>({
     name: '',
+    studentId: '', // NEW
+    createdAt: null,
     course: '',
     location: '',
     school: '',
     yearLevel: '',
-    strand: '',
-    section: '',
+    // strand + section REMOVED
     avatar: null,
     resumeUrl: null,
     resumeName: 'No resume uploaded'
@@ -97,16 +115,21 @@ export default function ProfilePage() {
   const [chatUnread, setChatUnread] = useState(0);
 
   const [tempUser, setTempUser] = useState<UserProfile>(user);
-  // ❌ REMOVED: tempCompany, tempTotal, isProgressModalOpen — the student
-  // can no longer edit required_hours or assigned_company. Those values
-  // come from the accepted application's post (duration_hours) and the
-  // company_name on that post, both read-only.
 
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [uploadingFile, setUploadingFile] = useState<string | null>(null);
 
   const progressPercent = progress.total > 0 ? Math.min((progress.completed / progress.total) * 100, 100) : 0;
+
+  // Student ID deadline: 60 days from registration. If still empty after that,
+  // the pg_cron job (student-id-deadline-cron.sql) deletes the account.
+  const studentIdDeadline = user.createdAt
+    ? new Date(new Date(user.createdAt).getTime() + 60 * 86400000)
+    : null;
+  const studentIdDaysLeft = studentIdDeadline
+    ? Math.ceil((studentIdDeadline.getTime() - Date.now()) / 86400000)
+    : null;
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -158,12 +181,13 @@ export default function ProfilePage() {
           const mappedData: UserProfile = {
             id: profile.id,
             name: profile.full_name || 'Student',
+            studentId: profile.student_id || '', // NEW
+            createdAt: profile.created_at || null,
             course: profile.course || 'N/A',
             location: profile.location || 'Not specified',
             school: profile.school_name || 'Not specified',
             yearLevel: profile.year_level || 'N/A',
-            strand: profile.strand || '',
-            section: profile.section || '',
+            // strand + section REMOVED
             avatar: profile.avatar_url || null,
             resumeUrl: profile.resume_url || null,
             resumeName: profile.resume_url
@@ -196,9 +220,6 @@ export default function ProfilePage() {
 
           const fetchedCompanyName: string | undefined = (applicationData as any)?.ojt_posts?.companies?.company_name;
           const fetchedCompanyUserId: string | undefined = (applicationData as any)?.ojt_posts?.companies?.user_id;
-          // ✅ Pull required_hours from the POST (duration_hours) — this is the
-          // source of truth set by the company when creating the post. We fall
-          // back to profile.required_hours only if the post doesn't have it.
           const fetchedPostDurationHours: number | undefined = (applicationData as any)?.ojt_posts?.duration_hours;
           const currentAppStatus: string | null = applicationData?.status?.toLowerCase() ?? null;
 
@@ -239,18 +260,8 @@ export default function ProfilePage() {
               company: companyName,
               status: profile.ojt_status === 'Completed' ? 'Completed' : 'Ongoing',
               appStatus: currentAppStatus,
-              // ✅ Use the post's duration_hours (set by company) as the
-              // required total. This is read-only — the student can no longer
-              // edit it from the profile (the edit pencil + modal were
-              // removed). Falls back to profile.required_hours if the post
-              // doesn't have duration_hours set.
               total: Number(fetchedPostDurationHours) || Number(profile.required_hours) || prev.total
-              // NOTE: 'completed' is intentionally NOT set here — fetchTotalHours()
-              // below populates it from ALL verified attendance_logs so the bar
-              // reflects the all-time total, not just the current month.
             }));
-            // ❌ REMOVED: setTempCompany(companyName) — tempCompany state was
-            // deleted along with the edit modal.
           } else {
             setProgress(prev => ({
               ...prev,
@@ -259,12 +270,9 @@ export default function ProfilePage() {
               status: profile.ojt_status || 'Not Started',
               appStatus: currentAppStatus
             }));
-            // ❌ REMOVED: setTempTotal(...) — tempTotal state was deleted.
           }
 
-          // Drive progress.completed from ALL verified logs (across all months)
           await fetchTotalHours(userId);
-          // And separately refresh the calendar dots for the current month
           await fetchAttendanceData(userId, currentMonth, currentYear);
         }
       } catch (error) {
@@ -297,12 +305,8 @@ export default function ProfilePage() {
 
           if (currentCompanyName !== progress.company) {
             setProgress(p => ({ ...p, company: currentCompanyName }));
-            // ❌ REMOVED: setTempCompany(currentCompanyName) — tempCompany
-            // state was deleted along with the edit modal.
           }
 
-          // Re-sync ALL-time hours on focus/visibility (cheap query, fixes
-          // the bug where returning to the tab showed stale 0 hours)
           await fetchTotalHours(user.id);
           await fetchAttendanceData(user.id, currentMonth, currentYear);
         }, 500);
@@ -320,14 +324,13 @@ export default function ProfilePage() {
   }, [progress.company, currentMonth, currentYear]);
 
   // ============================================================
-  // 💬 CHAT UNREAD BADGE — count unread messages from company + realtime
+  // CHAT UNREAD BADGE
   // ============================================================
   useEffect(() => {
     if (!user.id) return;
 
     const fetchUnread = async () => {
       try {
-        // Find all conversations where this student is a participant
         const { data: convs } = await supabase
           .from('conversations')
           .select('id')
@@ -337,7 +340,6 @@ export default function ProfilePage() {
           setChatUnread(0);
           return;
         }
-        // Count unread messages NOT sent by me
         const { count } = await supabase
           .from('messages')
           .select('*', { count: 'exact', head: true })
@@ -346,13 +348,12 @@ export default function ProfilePage() {
           .eq('is_read', false);
         setChatUnread(count || 0);
       } catch (err) {
-        console.error('💬 Unread count error:', err);
+        console.error('Unread count error:', err);
       }
     };
 
     fetchUnread();
 
-    // Realtime — update when new messages arrive or are read
     const channel = supabase
       .channel(`profile-chat-unread:${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchUnread)
@@ -391,31 +392,30 @@ export default function ProfilePage() {
     }
   }, []);
 
-// Extracted so it can be called by Enter key, "Add" button, and onBlur
-const addSkill = () => {
-  const newSkill = skillInput.trim();
-  if (!newSkill) return;
-  if (skills.includes(newSkill)) {
+  const addSkill = () => {
+    const newSkill = skillInput.trim();
+    if (!newSkill) return;
+    if (skills.includes(newSkill)) {
+      setSkillInput('');
+      return;
+    }
+    const updatedSkills = [...skills, newSkill];
+    setSkills(updatedSkills);
     setSkillInput('');
-    return;
-  }
-  const updatedSkills = [...skills, newSkill];
-  setSkills(updatedSkills);
-  setSkillInput('');
-  syncSkillsToDB(updatedSkills);
-};
+    syncSkillsToDB(updatedSkills);
+  };
 
-const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
-  const isCommit =
-    e.key === 'Enter' ||
-    e.key === ',' ||
-    e.key === 'Return' ||
-    (e as any).keyCode === 13;
-  if (isCommit) {
-    e.preventDefault();
-    addSkill();
-  }
-};
+  const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const isCommit =
+      e.key === 'Enter' ||
+      e.key === ',' ||
+      e.key === 'Return' ||
+      (e as any).keyCode === 13;
+    if (isCommit) {
+      e.preventDefault();
+      addSkill();
+    }
+  };
 
   const handleRemoveSkill = (skillToRemove: string) => {
     const updatedSkills = skills.filter(s => s !== skillToRemove);
@@ -463,7 +463,7 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
       showToast('Geolocation not supported', 'error');
       return;
     }
-    showToast('📍 Detecting location...', 'info');
+    showToast('Detecting location...', 'info');
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
@@ -483,7 +483,7 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
             const newLocation = formattedLocation || data.display_name;
             setUser(prev => ({ ...prev, location: newLocation }));
             setTempUser(prev => ({ ...prev, location: newLocation }));
-            showToast(`📍 Location: ${newLocation}`, 'success');
+            showToast(`Location: ${newLocation}`, 'success');
             const authUser = await getAuthenticatedUser();
             if (authUser) {
               await supabase.from('profiles').update({
@@ -495,7 +495,7 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
           } else {
             const coordLocation = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
             setUser(prev => ({ ...prev, location: coordLocation }));
-            showToast(`📍 Coordinates saved`, 'success');
+            showToast(`Coordinates saved`, 'success');
           }
         } catch (geoError) {
           showToast('Using coordinates only', 'info');
@@ -504,10 +504,10 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
       (error) => {
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            showToast('❌ Location permission denied', 'error');
+            showToast('Location permission denied', 'error');
             break;
           default:
-            showToast('❌ Location detection failed', 'error');
+            showToast('Location detection failed', 'error');
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
@@ -516,11 +516,6 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
 
   const normalizeLogDate = (raw?: string): string => (raw ? raw.split('T')[0] : '');
 
-  // fetchTotalHours: sums ALL verified attendance_logs across all months
-  // — but ONLY for the CURRENT (non-archived) OJT. Archived logs from a
-  // previously-completed OJT are excluded so the bar starts fresh at 0
-  // when the student begins a new OJT. The certificate generator reads
-  // archived=true separately to compute hours for the finished OJT.
   const fetchTotalHours = async (userId: string) => {
     if (!userId) return 0;
     try {
@@ -535,7 +530,6 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
       setProgress(prev => ({ ...prev, completed: total }));
       return total;
     } catch (err: any) {
-      // Supabase often returns {} — extract a real message
       const msg =
         err?.message ||
         err?.details ||
@@ -543,15 +537,11 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
         err?.code ||
         (err?.error && typeof err.error === 'string' ? err.error : null) ||
         JSON.stringify(err);
-      console.error('❌ fetchTotalHours error:', msg, err);
+      console.error('fetchTotalHours error:', msg, err);
       return 0;
     }
   };
 
-  // fetchAttendanceData: fetches the SELECTED MONTH's verified logs for the
-  // calendar dots and the "X days this month" counter. It no longer touches
-  // progress.completed — that's owned by fetchTotalHours so the bar stays
-  // correct even when the selected month has no entries.
   const fetchAttendanceData = async (userId: string, month?: number, year?: number) => {
     if (!userId) return;
     try {
@@ -586,9 +576,8 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
     }
   };
 
-  // ✅ FIXED: GPS-only attendance. Clicking calendar days just shows a message.
   const handleDayClick = async (day: number) => {
-    showToast('📍 Use the GPS Check-In above to mark your daily attendance.', 'info');
+    showToast('Use the GPS Check-In above to mark your daily attendance.', 'info');
     return;
   };
 
@@ -614,37 +603,52 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
           .getPublicUrl(uploadData?.path || `${authUser.id}/avatar`);
         avatarUrl = publicUrl;
       }
-      // ✅ REMOVED from the upsert payload: assigned_company, required_hours,
-      // ojt_status. The student should NOT be able to overwrite these from
-      // their profile edit — they're set by the company's post (duration_hours)
-      // and the accept/finish-OJT flows. Only personal fields are saved here.
+      // If the student is adding/changing their Student ID, validate the format
+      // AND check for duplicates before saving. This prevents fake/garbage IDs
+      // (too short, special characters, spaces) and blocks IDs already taken
+      // by another student.
+      const newStudentId = tempUser.studentId.trim();
+      if (newStudentId && newStudentId !== user.studentId) {
+        if (newStudentId.length < 4) {
+          showToast('Student ID must be at least 4 characters.', 'error');
+          setIsSaving(false);
+          return;
+        }
+        if (!/^[A-Za-z0-9-]+$/.test(newStudentId)) {
+          showToast('Student ID may only contain letters, numbers, and dashes.', 'error');
+          setIsSaving(false);
+          return;
+        }
+        const dup = await checkStudentDuplicate(newStudentId, authUser.email || '');
+        if (dup.duplicate && dup.field === 'student_id') {
+          showToast(dup.message, 'error');
+          setIsSaving(false);
+          return;
+        }
+      }
       const { error } = await supabase.from('profiles').upsert({
         id: authUser.id, email: authUser.email, full_name: tempUser.name.trim(),
+        student_id: newStudentId || null,
         course: tempUser.course.trim(), location: tempUser.location.trim(),
         school_name: tempUser.school.trim(), year_level: tempUser.yearLevel,
-        strand: tempUser.strand.trim(), section: tempUser.section.trim(),
         avatar_url: avatarUrl,
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
       if (error) throw error;
       setUser(prev => ({
-        ...prev, name: tempUser.name.trim(), course: tempUser.course.trim(),
+        ...prev, name: tempUser.name.trim(), studentId: newStudentId,
+        course: tempUser.course.trim(),
         location: tempUser.location.trim(), school: tempUser.school.trim(),
-        yearLevel: tempUser.yearLevel, strand: tempUser.strand.trim(),
-        section: tempUser.section.trim(), avatar: avatarUrl
+        yearLevel: tempUser.yearLevel,
+        avatar: avatarUrl
       }));
       setIsProfileModalOpen(false);
       router.refresh();
-      showToast('Saved! 🎉', 'success');
+      showToast('Saved!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Save failed', 'error');
     } finally { setIsSaving(false); }
   };
-
-  // ❌ REMOVED: handleSaveProgress — no longer needed because the
-  // "Update OJT Details" modal was deleted. The student can't edit
-  // required_hours or assigned_company anymore. Those values come from
-  // the company's post (duration_hours) and the accepted application.
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
@@ -667,7 +671,7 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
       const isImg = file.type.startsWith('image/');
       setUser(prev => ({ ...prev, resumeName: file.name, resumeUrl: urlData.publicUrl }));
       router.refresh();
-      showToast(isImg ? 'Screenshot saved! 📸' : 'Uploaded! 📄', 'success');
+      showToast(isImg ? 'Screenshot saved!' : 'Uploaded!', 'success');
     } catch (err: any) { showToast(err.message, 'error'); }
     finally { setUploadingFile(null); e.target.value = ''; }
   };
@@ -685,7 +689,7 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
     try {
       const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) console.error('SignOut error:', error.message);
-      setUser({ name: '', course: '', location: '', school: '', yearLevel: '', strand: '', section: '', avatar: null, resumeUrl: null, resumeName: 'No resume uploaded' });
+      setUser({ name: '', studentId: '', createdAt: null, course: '', location: '', school: '', yearLevel: '', avatar: null, resumeUrl: null, resumeName: 'No resume uploaded' });
       setProgress({ completed: 0, total: 500, company: '', status: 'Not Started', appStatus: null });
       setAttendedDays(new Set());
       setAttendanceRecords([]);
@@ -819,6 +823,43 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
           </div>
         </div>
 
+        {/* STUDENT ID DEADLINE WARNING — shown only when the student hasn't set
+            their Student ID yet. They have 60 days from registration to add it. */}
+        {!user.studentId && studentIdDeadline && (
+          <div className={`rounded-xl sm:rounded-2xl border p-4 sm:p-5 shadow-sm ${
+            (studentIdDaysLeft ?? 0) <= 7 ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'
+          }`}>
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                (studentIdDaysLeft ?? 0) <= 7 ? 'bg-red-500' : 'bg-amber-500'
+              }`}>
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold ${(studentIdDaysLeft ?? 0) <= 7 ? 'text-red-900' : 'text-amber-900'}`}>
+                  Add your Student ID
+                </p>
+                <p className={`mt-1 text-xs ${(studentIdDaysLeft ?? 0) <= 7 ? 'text-red-700' : 'text-amber-700'}`}>
+                  You haven't set your Student ID yet. Please add it by{' '}
+                  <strong>{studentIdDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</strong>
+                  {(studentIdDaysLeft ?? 0) > 0 ? ` — ${studentIdDaysLeft} day${studentIdDaysLeft === 1 ? '' : 's'} left.` : ' — the deadline has passed.'}
+                  {' '}Accounts without a Student ID after the deadline are deleted automatically.
+                </p>
+                <button
+                  onClick={() => { setTempUser(user); setIsProfileModalOpen(true); }}
+                  className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white ${
+                    (studentIdDaysLeft ?? 0) <= 7 ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  Add Student ID now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-100">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
             <h3 className="font-bold text-slate-800 text-base sm:text-lg">OJT Progress</h3>
@@ -829,11 +870,6 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
               }`}>
                 {progress.status}
               </span>
-              {/* ❌ REMOVED: the edit pencil button that opened the "Update OJT
-                  Details" modal. The student should NOT be able to edit
-                  required_hours or assigned_company — those come from the
-                  company's post (duration_hours) and the accepted application.
-                  The whole modal + handleSaveProgress were also removed. */}
             </div>
           </div>
 
@@ -914,16 +950,14 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
               <svg className="w-4 h-4 sm:w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
               </svg>
-              📅 View Attendance ({attendedDays.size} days)
+              View Attendance ({attendedDays.size} days)
               {!progress.company && <span className="text-[10px] sm:text-xs ml-1 opacity-70">(Assign company first)</span>}
             </button>
           </div>
         </div>
 
-        {/* GPS Check-In widget */}
         {user.id && <GeofenceCheckIn studentId={user.id} />}
         {user.id && <StudentCertificate studentId={user.id} />}
-        {/* Analytics dashboard */}
         {user.id && <StudentAnalytics studentId={user.id} />}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -938,11 +972,13 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
             </div>
             <div className="space-y-3 sm:space-y-4">
               {[
+                // NEW: Student ID shown first, read-only (set at registration,
+                // used as the duplicate-account anchor — not editable here).
+                { label: 'Student ID', value: user.studentId || 'N/A' },
                 { label: 'School', value: user.school },
                 { label: 'Course', value: user.course },
-                { label: 'Year Level', value: user.yearLevel },
-                { label: 'Strand', value: user.strand || 'N/A' },
-                { label: 'Section', value: user.section || 'N/A' }
+                { label: 'Year Level', value: user.yearLevel }
+                // Strand + Section REMOVED
               ].map((item) => (
                 <div key={item.label} className="flex justify-between items-center pb-2 sm:pb-3 border-b border-slate-50 last:border-0 last:pb-0">
                   <span className="text-xs sm:text-sm text-slate-500">{item.label}</span>
@@ -974,48 +1010,48 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
                     <span className="text-xs text-slate-400 italic py-1">No skills added yet</span>
                   )}
                 </div>
-               <div className="flex gap-2 items-stretch">
-  <input
-    id="student-skill-input"
-    type="text"
-    inputMode="text"
-    autoComplete="off"
-    autoCapitalize="words"
-    enterKeyHint="done"
-    spellCheck={false}
-    value={skillInput}
-    onChange={(e) => setSkillInput(e.target.value)}
-    onKeyDown={handleAddSkill}
-    onBlur={() => { if (skillInput.trim()) addSkill(); }}
-    placeholder="Type a skill, then tap Add…"
-    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-shadow placeholder:text-slate-400"
-  />
-  {skillInput.trim() && (
-    <button
-      type="button"
-      onClick={() => {
-        addSkill();
-        setTimeout(() => {
-          const el = document.getElementById('student-skill-input') as HTMLInputElement | null;
-          el?.focus();
-        }, 0);
-      }}
-      className="shrink-0 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
-      aria-label="Add skill"
-    >
-      + Add
-    </button>
-  )}
-</div>
+                <div className="flex gap-2 items-stretch">
+                  <input
+                    id="student-skill-input"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    autoCapitalize="words"
+                    enterKeyHint="done"
+                    spellCheck={false}
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    onKeyDown={handleAddSkill}
+                    onBlur={() => { if (skillInput.trim()) addSkill(); }}
+                    placeholder="Type a skill, then tap Add…"
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-shadow placeholder:text-slate-400"
+                  />
+                  {skillInput.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        addSkill();
+                        setTimeout(() => {
+                          const el = document.getElementById('student-skill-input') as HTMLInputElement | null;
+                          el?.focus();
+                        }, 0);
+                      }}
+                      className="shrink-0 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
+                      aria-label="Add skill"
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
 
-<div className="flex items-center justify-between mt-1 ml-1">
-  <p className="text-[10px] text-slate-400">Type a skill, then tap <strong className="font-semibold text-blue-600">Add</strong> (or press Enter)</p>
-  {skills.length > 0 && (
-    <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">
-      {skills.length} skill{skills.length !== 1 ? 's' : ''}
-    </span>
-  )}
-</div>
+                <div className="flex items-center justify-between mt-1 ml-1">
+                  <p className="text-[10px] text-slate-400">Type a skill, then tap <strong className="font-semibold text-blue-600">Add</strong> (or press Enter)</p>
+                  {skills.length > 0 && (
+                    <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">
+                      {skills.length} skill{skills.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[10px] text-slate-400 mt-1 ml-1">Used for matching OJT posts (KNN)</p>
               </div>
 
@@ -1217,6 +1253,26 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
                   />
                 </div>
 
+                {/* Student ID — editable so the student can complete it after
+                    registering without one. Checked for duplicates on save. */}
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">
+                    Student ID {!user.studentId && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm sm:text-base"
+                    value={tempUser.studentId}
+                    onChange={(e) => setTempUser({ ...tempUser, studentId: e.target.value })}
+                    placeholder="e.g. 2024-0001"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {user.studentId
+                      ? 'Already set.'
+                      : 'Required — letters, numbers, and dashes only (min 4 chars). Add it before the deadline or your account will be deleted.'}
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Course</label>
@@ -1252,38 +1308,9 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
                   />
                 </div>
 
-                {/* 🎓 SHS Fields — Strand + Section */}
-                <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Strand (SHS)</label>
-                    <select
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-blue-500 outline-none appearance-none text-sm sm:text-base"
-                      value={tempUser.strand}
-                      onChange={(e) => setTempUser({ ...tempUser, strand: e.target.value })}
-                    >
-                      <option value="">Select Strand</option>
-                      <option value="STEM">STEM</option>
-                      <option value="ABM">ABM</option>
-                      <option value="HUMSS">HUMSS</option>
-                      <option value="GAS">GAS</option>
-                      <option value="TVL-ICT">TVL - ICT</option>
-                      <option value="TVL-HE">TVL - HE</option>
-                      <option value="TVL-Agri">TVL - Agri</option>
-                      <option value="Arts and Design">Arts and Design</option>
-                      <option value="Sports">Sports</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Section</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm sm:text-base"
-                      value={tempUser.section}
-                      onChange={(e) => setTempUser({ ...tempUser, section: e.target.value })}
-                      placeholder="e.g. Rizal, Aguinaldo"
-                    />
-                  </div>
-                </div>
+                {/* REMOVED: the Strand (SHS) + Section grid — the student no
+                    longer edits these. Student ID is also not here: it's the
+                    identity anchor set at registration and must stay read-only. */}
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
@@ -1293,7 +1320,7 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
                       onClick={detectLocation}
                       className="text-[10px] sm:text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                     >
-                      Auto-Detect 📍
+                      Auto-Detect
                     </button>
                   </div>
                   <input
@@ -1328,11 +1355,6 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
           </div>
         </div>
       )}
-
-      {/* ❌ REMOVED: the "Update OJT Details" modal used to live here. It
-          let the student edit required_hours + assigned_company, which
-          overwrote the values set by the company's post. The whole modal
-          is gone — the student profile is now read-only for OJT details. */}
 
       {isCalendarModalOpen && (
         <div
@@ -1471,21 +1493,21 @@ const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
         }
       `}</style>
 
-     {user.id && (
-  <DraggableChatButton
-    onClick={() => setShowChat(true)}
-    unreadCount={chatUnread}
-    disabled={!(progress.appStatus === 'accepted' && progress.company && progress.status !== 'Completed' && companyUserId)}
-    title={`Message ${progress.company}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}`}
-    reason={
-      progress.status === 'Completed' ? 'Chat archived'
-      : progress.appStatus !== 'accepted' ? 'Not accepted yet'
-      : !companyUserId ? 'Loading...'
-      : 'Unavailable'
-    }
-    storageKey="student-profile-chat-pos"
-  />
-)}
+      {user.id && (
+        <DraggableChatButton
+          onClick={() => setShowChat(true)}
+          unreadCount={chatUnread}
+          disabled={!(progress.appStatus === 'accepted' && progress.company && progress.status !== 'Completed' && companyUserId)}
+          title={`Message ${progress.company}${chatUnread > 0 ? ` · ${chatUnread} unread` : ''}`}
+          reason={
+            progress.status === 'Completed' ? 'Chat archived'
+            : progress.appStatus !== 'accepted' ? 'Not accepted yet'
+            : !companyUserId ? 'Loading...'
+            : 'Unavailable'
+          }
+          storageKey="student-profile-chat-pos"
+        />
+      )}
 
       {showChat && user.id && companyUserId && (
         <ChatPanel

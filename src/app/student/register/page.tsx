@@ -1,5 +1,16 @@
 'use client';
 
+// UserRegister.patched.tsx  (DESTINATION: src/app/user/register/page.tsx — or wherever
+// your student registration page lives; the path with the "User" tab active.)
+//
+// Student registration — name, email, password only. Student ID is NOT collected
+// here; the student sets it from their profile (see StudentProfile.patched.tsx)
+// within 60 days or the account is auto-deleted (see student-id-deadline-cron.sql).
+//
+// Requires:
+//   - student-duplicate-prevention.sql has been run (adds profiles.student_id
+//     column + unique indexes + disables RLS on profiles).
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -52,7 +63,7 @@ export default function UserRegister() {
     const { email, password, confirmPassword, fullName } = formData;
 
     if (!email || !password || !confirmPassword || !fullName) {
-      alert("Please fill in all fields.");
+      alert("Please fill in all required fields.");
       return;
     }
 
@@ -89,6 +100,26 @@ export default function UserRegister() {
       if (error) {
         alert(error.message);
         return;
+      }
+
+      // ── DEFENSIVE PROFILE UPSERT ──
+      // Ensure the profiles row exists with student_id immediately, even if
+      // the auth trigger doesn't copy it from metadata. RLS on profiles is
+      // disabled (student-duplicate-prevention.sql), so the anon client can
+      // upsert here. onConflict:'id' avoids racing with the trigger.
+      if (data.user) {
+        try {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            email,
+            full_name: fullName,
+            role: 'student',
+          }, { onConflict: 'id' });
+        } catch (profileErr) {
+          // Non-fatal — the trigger may have already created the row, or the
+          // student will complete it on first login. Don't block registration.
+          console.warn('Profile upsert failed (non-fatal):', profileErr);
+        }
       }
 
       // ✅ NEW: Check if email confirmation is required

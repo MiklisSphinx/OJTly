@@ -1,18 +1,13 @@
-import { createClient } from '@supabase/supabase-js';
-console.log("Checking URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+// lib/supabase.ts   (DESTINATION: src/lib/supabase.ts)
+//
+// Re-export the SINGLE shared browser Supabase client from utils/supabase/client.
+// After this, both import styles resolve to the SAME GoTrueClient instance:
+//
+//   import { supabase } from '@/lib/supabase'                 // MoaGenerator, CompanyMoaSection
+//   import { createClient } from '@/utils/supabase/client'    // admin_main, company_main
+//
+// No more "Multiple GoTrueClient instances detected" warning, and the session
+// can no longer drift between two clients (which was the root cause of the
+// company dashboard not seeing the admin-issued MOA).
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
-
-// This check prevents the "supabaseUrl is required" crash
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error(
-    'MISSING SUPABASE KEYS: Check your .env.local file and restart your terminal.'
-  );
-}
-
-// Initialize the client only if keys exist, otherwise use an empty string to satisfy the types
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
-);
+export { supabaseBrowser as supabase, createClient } from '@/utils/supabase/client'

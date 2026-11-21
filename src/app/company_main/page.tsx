@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import CompanyNotificationBell from '@/components/CompanyNotificationBell';
 import CompanyChat from '@/components/CompanyChat';
 import DraggableChatButton from '@/components/DraggableChatButton';
-
+import CompanyMoaCard from '@/components/CompanyMoaCard';
 // ==========================================
 // INTERFACES
 // ==========================================
@@ -594,6 +594,9 @@ useEffect(() => {
               </div>
             )}
           </div>
+
+                    {/* MOA Status Card */}
+          <CompanyMoaCard />
 
           {/* STATS GRID - 4 Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

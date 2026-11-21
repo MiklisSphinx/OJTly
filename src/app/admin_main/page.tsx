@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import AdminNotificationBell from '@/components/AdminNotificationBell';
 import FloatingChatButton from '@/components/FloatingChatButton';
+import MoaGenerator from '@/components/MoaGenerator';
+
 
 type Toast = { id: number; message: string; type: 'success' | 'error' | 'info'; };
 type Student = { id: string; full_name: string; email: string; course: string | null; ojt_status?: string; };
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+    const [adminAuthId, setAdminAuthId] = useState<string | null>(null);
 
   // LIVE counts directly from database state
   const totalAcceptedStudents = useMemo(() => {
@@ -47,6 +50,20 @@ export default function AdminDashboard() {
   }, [companies]);
 
   useEffect(() => { const t = setTimeout(() => setAnimatedCards(true), 100); return () => clearTimeout(t); }, []);
+
+    // Grabs the logged-in admin's user id so we can pass it to the MOA Generator
+  useEffect(() => {
+    const getAdmin = async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user) setAdminAuthId(data.session.user.id);
+      } catch (e) {
+        console.warn('Admin session fetch failed:', e);
+      }
+    };
+    getAdmin();
+  }, []);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -105,9 +122,7 @@ export default function AdminDashboard() {
         addToast(error instanceof Error ? error.message : 'Failed to load', 'error');
       } finally { setIsLoadingStats(false); setIsLoadingList(false); }
     };
-    fetchInitialData();
-    const interval = setInterval(fetchInitialData, 30000);
-    return () => clearInterval(interval);
+      fetchInitialData();
   }, []);
 
   const refreshStudents = async () => {
@@ -456,6 +471,9 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+
+                    {/* MOA GENERATOR */}
+        {activeView === 'companies' && adminAuthId && (<MoaGenerator adminId={adminAuthId} />)}
 
           {/* STUDENTS LIST */}
           {activeView === 'students' && (
