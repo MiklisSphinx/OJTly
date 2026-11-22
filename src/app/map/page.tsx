@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import NotificationBell from '@/components/NotificationBell';
 import ChatPanel from '@/components/ChatPanel';
 import DraggableChatButton from '@/components/DraggableChatButton';
+import WelcomeGuide from '@/components/WelcomeGuide';
 
 interface OJTPost {
   id: string;
@@ -241,6 +242,7 @@ interface MapComponentProps {
   activeOJTPostId?: string;
   onLocationUpdate?: (loc: { lat: number; lng: number }) => void;
   trackPath?: [number, number][]; // ← NEW PROP
+  onToggleTracking?: () => void;
 }
 
 function MapComponent({
@@ -248,7 +250,7 @@ function MapComponent({
   travelMode, onPostSelect, showDirections, targetPost,
   mapStyle, isTracking, onRecenter, gpsAccuracy, fitBoundsTrigger = 0,
   applicationStatuses, hasActiveOJT, activeOJTCompanyId, activeOJTPostId,
-  onLocationUpdate, trackPath
+  onLocationUpdate, trackPath, onToggleTracking
 }: MapComponentProps): React.ReactElement {
   const [L, setL] = useState<unknown>(null);
   const [loaded, setLoaded] = useState(false);
@@ -457,7 +459,7 @@ function MapComponent({
   return (
     <div className="w-full h-full relative">
       <div ref={containerRef} className="w-full h-full" />
-      <button type="button" onClick={onRecenter} className={`absolute bottom-20 right-3 z-[4000] w-12 h-12 rounded-full shadow-lg transition-all flex items-center justify-center hover:scale-110 active:scale-95 ${isTracking ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/40 ring-4 ring-emerald-500/20' : 'bg-white hover:bg-blue-50 shadow-black/20 border border-slate-100'}`} title="Center on my location">
+          <button type="button" onClick={() => { if (onToggleTracking) { onToggleTracking(); onRecenter(); } else { onRecenter(); } }} className={`absolute bottom-20 right-3 z-[4000] w-12 h-12 rounded-full shadow-lg transition-all flex items-center justify-center hover:scale-110 active:scale-95 ${isTracking ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/40 ring-4 ring-emerald-500/20' : 'bg-white hover:bg-blue-50 shadow-black/20 border border-slate-100'}`} title={isTracking ? 'Stop tracking' : 'Start live tracking'}>
         {isTracking && <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-30" />}
         <svg className={`w-5 h-5 ${isTracking ? 'text-white' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
       </button>
@@ -922,8 +924,7 @@ export default function MapPage() {
     <div className="fixed inset-0 bg-slate-900 font-sans overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <MapComponent posts={filteredPosts} selectedPostId={selectedPostId} studentLocation={studentLoc} studentSkills={profile?.skills || []} studentCourse={profile?.course} userId={userId ?? undefined} travelMode={travelMode} onPostSelect={selectPost} showDirections={showRoute} targetPost={selectedPost ? { lat: selectedPost.latitude, lng: selectedPost.longitude } : null} mapStyle={mapStyle} isTracking={isTracking} onRecenter={handleRecenter} gpsAccuracy={gpsAccuracy} fitBoundsTrigger={fitBoundsTrigger} applicationStatuses={applicationStatuses} hasActiveOJT={hasActiveOJT} activeOJTCompanyId={activeOJTCompanyId} activeOJTPostId={activeOJTPostId} onLocationUpdate={(loc) => { setStudentLoc(loc); setFitBoundsTrigger(prev => prev + 1); }} trackPath={trackPath} />
-
+      <MapComponent posts={filteredPosts} selectedPostId={selectedPostId} studentLocation={studentLoc} studentSkills={profile?.skills || []} studentCourse={profile?.course} userId={userId ?? undefined} travelMode={travelMode} onPostSelect={selectPost} showDirections={showRoute} targetPost={selectedPost ? { lat: selectedPost.latitude, lng: selectedPost.longitude } : null} mapStyle={mapStyle} isTracking={isTracking} onRecenter={handleRecenter} onToggleTracking={() => { if (isTracking) stopTracking(); else startTracking(); }} gpsAccuracy={gpsAccuracy} fitBoundsTrigger={fitBoundsTrigger} applicationStatuses={applicationStatuses} hasActiveOJT={hasActiveOJT} activeOJTCompanyId={activeOJTCompanyId} activeOJTPostId={activeOJTPostId} onLocationUpdate={(loc) => { setStudentLoc(loc); setFitBoundsTrigger(prev => prev + 1); }} trackPath={trackPath} />
       <header className="absolute top-0 left-0 right-0 z-40 px-2 py-2 sm:px-3 sm:py-3 md:px-4 md:py-4">
         <div className="flex items-center gap-2">
           <Link href="/student_main" className="group relative bg-white/95 backdrop-blur-xl px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-xl sm:rounded-2xl shadow-lg shadow-black/[0.08] border border-white/60 flex items-center gap-1 sm:gap-2 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden shrink-0">
@@ -970,7 +971,11 @@ export default function MapPage() {
             </div>
           </div>
           <div className="h-[1px] bg-slate-200/60 mx-4 md:mx-5" />
-          <div className="pt-2 md:pt-4 pb-1">
+                 <div className="pt-2 md:pt-4 pb-1">
+            <div className="flex items-center gap-2 px-4 pb-2 md:px-5">
+              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" strokeWidth={2} strokeLinejoin="round" /></svg>
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Track Tracker</span>
+            </div>
             <ProfileOverlay profile={profile} profileLoading={profileLoading} profileError={profileError} userId={userId} isTracking={isTracking} isLocating={isLocating} studentLoc={studentLoc} showLocPopup={showLocPopup} onToggleTracking={() => { if (isTracking) stopTracking(); else startTracking(); }} onDetectLoc={detectLoc} onOpenPopup={() => setShowLocPopup(true)} onClosePopup={() => setShowLocPopup(false)} onStopTracking={stopTracking} />
           </div>
         </div>
@@ -1161,7 +1166,9 @@ export default function MapPage() {
   />
 )}
 
-      {showChat && userId && companyUserId && (<ChatPanel myUserId={userId} otherUserId={companyUserId} myName={profile?.full_name || 'Student'} otherName={activeOJTCompany} onClose={() => setShowChat(false)} />)}
+        {showChat && userId && companyUserId && (<ChatPanel myUserId={userId} otherUserId={companyUserId} myName={profile?.full_name || 'Student'} otherName={activeOJTCompany} onClose={() => setShowChat(false)} />)}
+
+      <WelcomeGuide variant="map" />
     </div>
   );
 }

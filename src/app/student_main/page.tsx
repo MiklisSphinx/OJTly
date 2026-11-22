@@ -8,6 +8,7 @@ import { createClient } from '@/utils/supabase/client';
 import NotificationBell from '@/components/NotificationBell';   // ← add this line
 import ChatPanel from '@/components/ChatPanel';
 import DraggableChatButton from '@/components/DraggableChatButton';
+import WelcomeGuide from '@/components/WelcomeGuide';
 
 
 // ==========================================
@@ -1162,7 +1163,8 @@ export default function StudentMainPage() {
               <Link href="/student_main" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-blue-600 bg-blue-50 rounded-xl">📋 Find OJT</Link>
               <Link href="/map" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">🗺️ Map View</Link>
               <Link href="/student_applications" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">📋 My Applications</Link>
-              <Link href="/studentai" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">🤖 AI Assistant</Link>
+                          <Link href="/studentai" onClick={() => setIsMobileMenuOpen(false)} className="block px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">🤖 AI Assistant</Link>
+              <button onClick={() => { setIsMobileMenuOpen(false); window.dispatchEvent(new Event('open-ojtly-guide')); }} className="block w-full text-left px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">❓ User Guide</button>
               <hr className="border-slate-100 my-2 sm:my-3" />
               <Link href="/student_profile" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-slate-700 hover:bg-slate-50 rounded-xl">
                 <div className="w-8 h-8 bg-gradient-to-tr from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-bold">{studentInitial}</div>
@@ -1209,8 +1211,7 @@ export default function StudentMainPage() {
             
             <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-6 text-blue-200 text-xs sm:text-sm">
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-400 rounded-full"></span>
-                <strong className="text-white text-sm sm:text-base">{filteredPosts.length}</strong>
+         
                 <span className="hidden xs:inline">positions available</span>
               </span>
 
@@ -1673,6 +1674,8 @@ export default function StudentMainPage() {
           onClose={() => setShowChat(false)}
         />
       )}
+
+      <WelcomeGuide />
     </div>
   );
 }
