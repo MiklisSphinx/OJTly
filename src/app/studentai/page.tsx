@@ -1,4 +1,3 @@
-
 "use client";
 export const dynamic = 'force-dynamic';
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -361,7 +360,33 @@ export default function StudentAI() {
   const [refreshing, setRefreshing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
+  // ─── LIVE TRACKING STATE ───
+  const [isTrackingLoc, setIsTrackingLoc] = useState(false);
+  const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const [livePos, setLivePos] = useState<{
+    lat: number;
+    lng: number;
+    accuracy: number;
+    heading: number | null;
+    speed: number | null;
+    ts: Date;
+    city?: string;
+    dist?: number;
+  } | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const hasSearchedRef = useRef(false);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
+
+  // ─── Cleanup watchPosition on unmount ───
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, []);
 
  const send = async (query: string, location: string, skipAdd?: boolean) => {
     // 1. Add user message immediately
@@ -380,16 +405,87 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
     content: m.text
   }))
   .slice(-4);   // keep only the last 4 messages — prevents Groq from getting "conversational"
-      
+
+    // ✅ GPS FIX: Get the user's REAL GPS coordinates before sending.
+    // This makes the chatbot distances match the map (17.1 km instead of 0.0 km).
+    // 3-layer fallback: livePos → localStorage cache → fresh getCurrentPosition
+    const getCurrentGPS = (): Promise<{ lat: number; lng: number } | null> => {
+      return new Promise((resolve) => {
+        // Layer 1: If live tracking is active, use the cached position (instant)
+        if (livePos) {
+          resolve({ lat: livePos.lat, lng: livePos.lng });
+          return;
+        }
+
+        // Layer 2: Try localStorage cached GPS (from a previous session)
+        // Useful when GPS permission is granted but fresh reading is slow
+        if (typeof window !== "undefined") {
+          try {
+            const cached = localStorage.getItem("ojtly_last_gps");
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              // Use cached GPS if less than 30 minutes old
+              if (parsed && parsed.lat && parsed.lng && parsed.ts &&
+                  Date.now() - parsed.ts < 30 * 60 * 1000) {
+                console.log(`📍 Using cached GPS from localStorage: ${parsed.lat.toFixed(5)}, ${parsed.lng.toFixed(5)} (${Math.round((Date.now() - parsed.ts) / 1000)}s old)`);
+                resolve({ lat: parsed.lat, lng: parsed.lng });
+                return;
+              }
+            }
+          } catch { /* ignore parse errors */ }
+        }
+
+        // Layer 3: Fresh getCurrentPosition with generous timeout
+        if (!navigator.geolocation) {
+          console.warn("⚠️ navigator.geolocation not available");
+          resolve(null);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const result = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            console.log(`📍 Fresh GPS acquired: ${result.lat.toFixed(5)}, ${result.lng.toFixed(5)} (±${Math.round(pos.coords.accuracy)}m)`);
+            // Cache for next time
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("ojtly_last_gps", JSON.stringify({
+                  lat: result.lat,
+                  lng: result.lng,
+                  ts: Date.now(),
+                }));
+              } catch { /* ignore quota errors */ }
+            }
+            resolve(result);
+          },
+          (err) => {
+            console.warn(`⚠️ GPS failed (${err.code}: ${err.message}) — falling back to city center`);
+            resolve(null);
+          },
+          // enableHighAccuracy: false → faster, good enough for city-level distance
+          // timeout: 15000 → 15 seconds (was 8s, too short for desktop)
+          // maximumAge: 300000 → accept cache up to 5 min old
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+        );
+      });
+    };
+
+    const gps = await getCurrentGPS();
+
     try {
       // ✅ FIX 1: Increased to 2500ms (2.5 sec) minimum so skeleton feels natural
       const [res] = await Promise.all([
-        fetch("/api/chat", { 
-          method: "POST", 
-          headers: { "Content-Type": "application/json" }, 
-          body: JSON.stringify({ messages: hist, explicitLocation: location }) 
+        fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: hist,
+            explicitLocation: location,
+            // ✅ Pass REAL GPS so distances match the map
+            userLat: gps?.lat,
+            userLng: gps?.lng,
+          })
         }),
-        new Promise(resolve => setTimeout(resolve, 2500)) 
+        new Promise(resolve => setTimeout(resolve, 2500))
       ]);
       
       const d = await res.json(); 
@@ -417,6 +513,109 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
       setIsTyping(false); 
     }
   };
+
+  // ═══════════════════════════════════════════════
+  // 📍 LIVE LOCATION TRACKING (watchPosition)
+  // ═══════════════════════════════════════════════
+
+  // Known city coordinates (same as your chat route + extras)
+  const KNOWN_CITIES = useMemo(() => [
+    { name: "Bacolod City", lat: 10.6317, lng: 122.9531, query: "Show me OJT openings in Bacolod City", location: "bacolod city" },
+    { name: "Silay City", lat: 10.8064, lng: 122.9739, query: "Find OJT openings in Silay City", location: "silay city" },
+    { name: "Talisay City", lat: 10.7586, lng: 122.9714, query: "What OJT openings are available in Talisay City?", location: "talisay city" },
+    { name: "Bago City", lat: 10.5333, lng: 122.9333, query: "Find OJT openings in Bago City", location: "bago city" },
+    { name: "Murcia", lat: 10.6000, lng: 123.0333, query: "Find OJT openings in Murcia", location: "murcia" },
+    { name: "Victorias City", lat: 10.9167, lng: 123.0667, query: "Find OJT openings in Victorias City", location: "victorias city" },
+  ], []);
+
+  // Haversine distance (km)
+  const haversine = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const findNearestCity = (lat: number, lng: number) => {
+    let nearest = KNOWN_CITIES[0];
+    let minDist = Infinity;
+    for (const c of KNOWN_CITIES) {
+      const dist = haversine(lat, lng, c.lat, c.lng);
+      if (dist < minDist) { minDist = dist; nearest = c; }
+    }
+    return { ...nearest, distance: minDist };
+  };
+
+  // ▶ START live tracking — uses watchPosition for continuous updates
+  const startLiveTracking = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by this browser.");
+      return;
+    }
+    // Clear any existing watch
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+    hasSearchedRef.current = false;
+    setIsLiveTracking(true);
+    setIsTrackingLoc(true);
+    setError(null);
+    setLivePos(null);
+
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude, accuracy, heading, speed } = position.coords;
+        const nearest = findNearestCity(latitude, longitude);
+        setLivePos({
+          lat: latitude,
+          lng: longitude,
+          accuracy,
+          heading: heading ?? null,
+          speed: speed ?? null,
+          ts: new Date(),
+          city: nearest.name,
+          dist: nearest.distance,
+        });
+
+        // ✅ Auto-trigger nearest city OJT search on first valid lock
+        if (!hasSearchedRef.current && nearest.distance < 100) {
+          hasSearchedRef.current = true;
+          send(`Find OJT openings near me (I'm in ${nearest.name}, ${nearest.distance.toFixed(1)} km away)`, nearest.location);
+        }
+      },
+      (err) => {
+        setIsLiveTracking(false);
+        setIsTrackingLoc(false);
+        const msgs: Record<number, string> = {
+          1: "Location permission denied. Allow location access in your browser settings and try again.",
+          2: "Location unavailable. Check your GPS or network connection.",
+          3: "Location request timed out. Try again.",
+        };
+        setError(msgs[err.code] || "Failed to get location.");
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    );
+    watchIdRef.current = id;
+  };
+
+  // ⏹ STOP live tracking
+  const stopLiveTracking = () => {
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsLiveTracking(false);
+    setIsTrackingLoc(false);
+  };
+
+  // Toggle button handler
+  const toggleLiveTracking = () => {
+    if (isLiveTracking) stopLiveTracking();
+    else startLiveTracking();
+  };
   
   const handleRefresh = async () => {
     if (refreshing || isTyping || messages.length < 2) return;
@@ -429,6 +628,13 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
   };
 
   const fmt = (d?: Date) => d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+
+  // Compass direction helper
+  const compassDir = (heading: number | null): string => {
+    if (heading === null || isNaN(heading)) return "—";
+    const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+    return dirs[Math.round(heading / 45) % 8];
+  };
 
   if (mode === "menu") {
     return (
@@ -482,6 +688,81 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
               ))}
             </div>
 
+            {/* ════════ 📍 LIVE LOCATION TRACK BUTTON ════════ */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.42 }}
+              className="w-full"
+            >
+              <button
+                onClick={toggleLiveTracking}
+                disabled={isTyping && !isLiveTracking}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border shadow-sm hover:shadow-lg transition-all duration-200 active:scale-[0.95] ${
+                  isLiveTracking
+                    ? "bg-red-50 border-red-200 hover:bg-red-100"
+                    : "bg-gradient-to-r from-emerald-500 to-teal-600 border-emerald-300 text-white hover:from-emerald-600 hover:to-teal-700"
+                }`}
+              >
+                {isLiveTracking ? (
+                  <>
+                    {/* Stop icon */}
+                    <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                    <span className="text-[11px] font-extrabold text-red-700">Stop Live Tracking</span>
+                  </>
+                ) : (
+                  <>
+                    {/* Pulsing GPS icon */}
+                    <span className="relative flex h-4 w-4 items-center justify-center">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-60" />
+                      <svg className="relative w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="3" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                      </svg>
+                    </span>
+                    <span className="text-[11px] font-extrabold tracking-tight">Track My Live Location</span>
+                  </>
+                )}
+              </button>
+
+              {/* Live position preview on menu (when tracking active) */}
+              {isLiveTracking && livePos && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="mt-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-2"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold text-emerald-800 truncate">
+                      {livePos.city} • {livePos.dist?.toFixed(1)} km away
+                    </p>
+                    <p className="text-[8px] text-emerald-600 font-mono">
+                      {livePos.lat.toFixed(5)}, {livePos.lng.toFixed(5)}
+                    </p>
+                  </div>
+                  <span className="text-[8px] text-emerald-500 font-semibold">LIVE</span>
+                </motion.div>
+              )}
+
+              {/* Acquiring position state (button pressed but no lock yet) */}
+              {isLiveTracking && !livePos && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2"
+                >
+                  <svg className="w-3 h-3 text-amber-600 animate-spin" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+                  </svg>
+                  <span className="text-[10px] font-bold text-amber-700">Acquiring GPS signal…</span>
+                </motion.div>
+              )}
+            </motion.div>
+
             <p className="text-[8px] font-semibold text-slate-300 tracking-widest uppercase">Powered by OJTly AI</p>
           </div>
         </main>
@@ -499,10 +780,27 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
     <OJTlyLogo size="sm" />
     <div className="flex items-center gap-1.5 shrink-0">
       <NotificationBell />
-      <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded-full px-1.5 py-0.5">
-        <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" /></span>
-        <span className="text-[8px] font-bold text-emerald-700">Online</span>
-      </div>
+
+      {/* 🟢 Live tracking pill (replaces static Online pill when tracking) */}
+      {isLiveTracking ? (
+        <button
+          onClick={stopLiveTracking}
+          className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-full px-1.5 py-0.5 hover:bg-red-100 transition-colors"
+          title="Click to stop live tracking"
+        >
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+          </span>
+          <span className="text-[8px] font-bold text-red-700">LIVE ON</span>
+        </button>
+      ) : (
+        <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded-full px-1.5 py-0.5">
+          <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" /></span>
+          <span className="text-[8px] font-bold text-emerald-700">Online</span>
+        </div>
+      )}
+
       <button onClick={handleRefresh} disabled={refreshing || isTyping || messages.length < 2}
         className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-25 disabled:pointer-events-none" title="Refresh">
         <span className={refreshing ? "animate-spin inline-block" : "inline-block"}>{IcRefresh}</span>
@@ -513,6 +811,60 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
 
       <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         <div className="max-w-md mx-auto px-4 py-5 flex flex-col items-center space-y-4">
+
+          {/* ════════ 📍 FLOATING LIVE POSITION PANEL (chat mode) ════════ */}
+          <AnimatePresence>
+            {isLiveTracking && livePos && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                className="w-full bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-3 shadow-sm"
+              >
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                    </span>
+                    <span className="text-[10px] font-extrabold text-emerald-800 tracking-tight">LIVE LOCATION</span>
+                  </div>
+                  <span className="text-[8px] text-emerald-500 font-mono">
+                    {fmt(livePos.ts)}
+                  </span>
+                </div>
+
+                {/* Coordinates grid */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="bg-white/70 rounded-lg px-2 py-1.5">
+                    <p className="text-[7px] font-bold text-emerald-600 uppercase tracking-wider mb-0.5">Latitude</p>
+                    <p className="text-[10px] font-mono font-bold text-emerald-900">{livePos.lat.toFixed(5)}°</p>
+                  </div>
+                  <div className="bg-white/70 rounded-lg px-2 py-1.5">
+                    <p className="text-[7px] font-bold text-emerald-600 uppercase tracking-wider mb-0.5">Longitude</p>
+                    <p className="text-[10px] font-mono font-bold text-emerald-900">{livePos.lng.toFixed(5)}°</p>
+                  </div>
+                </div>
+
+                {/* Status row */}
+                <div className="flex items-center justify-between text-[9px]">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-emerald-700">
+                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      <span className="font-bold">{livePos.city}</span>
+                      <span className="text-emerald-500">· {livePos.dist?.toFixed(1)} km</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-600">
+                    <span className="font-mono">±{Math.round(livePos.accuracy)}m</span>
+                    <span className="font-semibold">· {compassDir(livePos.heading)}</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
                    <AnimatePresence mode="popLayout">
             {messages.filter(msg => msg.text && msg.text.trim().length > 0).map(msg => (
               <motion.div key={msg.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 400, damping: 30 }}
@@ -580,6 +932,34 @@ const hist = (skipAdd ? messages : [...messages, { id: Date.now(), text: query, 
                     </motion.button>
                   ))}
                 </div>
+
+                {/* Mini live-track toggle in chat explore section */}
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4 }}
+                  onClick={toggleLiveTracking}
+                  className={`w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border shadow-sm transition-all active:scale-[0.95] ${
+                    isLiveTracking
+                      ? "bg-red-50 border-red-200 hover:bg-red-100"
+                      : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                  }`}
+                >
+                  {isLiveTracking ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-red-600" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                      <span className="text-[10px] font-extrabold text-red-700">Stop Live Tracking</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="3" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                      </svg>
+                      <span className="text-[10px] font-extrabold text-emerald-700">Track My Live Location</span>
+                    </>
+                  )}
+                </motion.button>
               </motion.div>
             )}
           </AnimatePresence>

@@ -1090,7 +1090,7 @@ export default function MapPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white rounded-xl p-3 text-center shadow-sm border border-slate-100"><p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-1">Distance</p><p className="text-xl font-black text-slate-900 tabular-nums">{userId ? (selectedPost._distance || 0) : '—'}<span className="text-xs font-normal text-slate-400 ml-1">km</span></p></div>
                   <div className="bg-white rounded-xl p-3 text-center shadow-sm border-l-4" style={{ borderColor: ROUTE_STYLES[travelMode].color }}><p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: ROUTE_STYLES[travelMode].color }}>Time</p><p className="text-xl font-black tabular-nums" style={{ color: ROUTE_STYLES[travelMode].color }}>{userId ? (selectedPost._travelMins || 0) : '—'}<span className="text-xs font-normal opacity-60 ml-1">min</span></p></div>
-                                  <div className="mt-2 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-mono">
+                                          <div className="mt-2 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-mono">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   <span>Lat: {selectedPost.latitude.toFixed(4)}, Lng: {selectedPost.longitude.toFixed(4)}</span>
                 </div>
