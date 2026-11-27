@@ -25,7 +25,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex font-sans overflow-x-hidden bg-[#F8FAFC]">
-
+{/* BACKGROUND GRADIENTS */}
       {/* LEFT SIDE — matches login */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-indigo-900 relative overflow-hidden justify-center items-center">
         <div className="absolute top-10 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
