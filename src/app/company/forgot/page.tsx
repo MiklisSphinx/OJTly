@@ -26,10 +26,11 @@ export default function ForgotPassword() {
     // ✅ FIXED: use `emailRedirectTo` (NOT `redirectTo`)
     // `redirectTo` is for OAuth (Google login).
     // `emailRedirectTo` is for password reset + magic links.
-  const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+ const { error: resetError } = await supabase.auth.resetPasswordForEmail(
   email.trim().toLowerCase(),
-  // @ts-expect-error - runtime accepts emailRedirectTo, older types don't include it
-  { emailRedirectTo: `${window.location.origin}/company/reset-password` }
+  {
+    redirectTo: `${window.location.origin}/company/reset-password`,
+  }
 );
 
     if (resetError) {
