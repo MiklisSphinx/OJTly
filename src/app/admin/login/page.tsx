@@ -179,9 +179,7 @@ export default function AdminLogin() {
                   </>
                 ) : (
                   <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4 4m0 0l4 4m3-13V8a3 3 0 00-3-3H5a3 3 0 00-3 3v6a3 3 0 003 3h2" />
-                    </svg>
+                    
                     <span>Login to Dashboard</span>
                   </>
                 )}

@@ -285,7 +285,7 @@ function MapComponent({
       let badgeBg = '#fef3c7', badgeColor = '#92400e', badgeBorder = '#fcd34d', label = getStatusLabel(appStatus);
       if (normalized === 'accepted' || normalized === 'approved') { badgeBg = '#d1fae5'; badgeColor = '#065f46'; badgeBorder = '#6ee7b7'; label = '✅ ' + label; }
       else if (normalized === 'rejected' || normalized === 'declined') { badgeBg = '#fee2e2'; badgeColor = '#991b1b'; badgeBorder = '#fca5a5'; label = '❌ ' + label; }
-      else if (normalized === 'completed') { badgeBg = '#dbeafe'; badgeColor = '#1e40af'; badgeBorder = '#93c5fd'; label = '🎓 OJT Completed'; }
+      else if (normalized === 'completed') { badgeBg = '#dbeafe'; badgeColor = '#1e40af'; badgeBorder = '#93c5fd'; label = ' OJT Completed'; }
       else { label = '⏳ ' + label; }
       statusBadge = `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:${badgeBg};padding:4px 10px;border-radius:20px;border:1px solid ${badgeBorder};"><span style="color:${badgeColor};font-size:11px;font-weight:700;">${label}</span></div>`;
     }
@@ -293,12 +293,12 @@ function MapComponent({
     if (hasActiveOJT && activeOJTPostId !== post.id) {
       const postCompanyId = post.companies?.id;
       if (activeOJTCompanyId && postCompanyId && activeOJTCompanyId === postCompanyId) {
-        ojtNoticeBadge = `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;margin-left:6px;background:#eff6ff;padding:4px 10px;border-radius:20px;border:1px solid #bfdbfe;"><span style="color:#2563eb;font-size:11px;font-weight:700;">📋 Already hired in other post</span></div>`;
+        ojtNoticeBadge = `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;margin-left:6px;background:#eff6ff;padding:4px 10px;border-radius:20px;border:1px solid #bfdbfe;"><span style="color:#2563eb;font-size:11px;font-weight:700;"> Already hired in other post</span></div>`;
       } else {
-        ojtNoticeBadge = `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;margin-left:6px;background:#fffbeb;padding:4px 10px;border-radius:20px;border:1px solid #fde68a;"><span style="color:#b45309;font-size:11px;font-weight:700;">🏢 Hired by other company</span></div>`;
+        ojtNoticeBadge = `<div style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;margin-left:6px;background:#fffbeb;padding:4px 10px;border-radius:20px;border:1px solid #fde68a;"><span style="color:#b45309;font-size:11px;font-weight:700;"> Hired by other company</span></div>`;
       }
     }
-    return `<div style="font-family:system-ui,sans-serif;min-width:220px;max-width:280px;padding:0;border-radius:16px;overflow:hidden;background:white;box-shadow:0 10px 25px rgba(0,0,0,0.15);"><div style="background:linear-gradient(135deg,${colors.bg},${colors.border});padding:14px;"><h3 style="margin:0;color:white;font-size:15px;font-weight:800;line-height:1.3;">${post.location_name || post.title || companyName}</h3><div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:rgba(255,255,255,0.25);padding:4px 12px;border-radius:20px;"><span style="color:white;font-size:12px;font-weight:800;">🎯 ${matchLabel}</span></div></div><div style="padding:12px;background:#fafbfc;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;"><div style="background:white;padding:8px;border-radius:10px;border:1px solid #e5e7eb;"><div style="font-size:9px;color:#9ca3af;font-weight:700;margin-bottom:2px;">Slots</div><div style="font-size:14px;font-weight:800;color:#1f2937;">${post.vacancies ?? 'N/A'}</div></div><div style="background:white;padding:8px;border-radius:10px;border:1px solid #e5e7eb;"><div style="font-size:9px;color:#9ca3af;font-weight:700;margin-bottom:2px;">Distance</div><div style="font-size:12px;font-weight:700;color:${colors.bg};">${userId ? post.knn.distance + ' km' : 'N/A'}</div></div></div><div style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to right,#f0fdf4,#fff);padding:8px 12px;border-radius:10px;border:1px solid #bbf7d0;"><span style="font-size:11px;color:#166534;font-weight:600;">⏱ Duration</span><span style="font-size:13px;font-weight:800;color:#15803d;">${post.duration_hours || 'TBA'} hrs</span></div>${statusBadge ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;">${statusBadge}${ojtNoticeBadge}</div>` : ojtNoticeBadge ? `<div style="margin-top:8px;">${ojtNoticeBadge}</div>` : ''}</div><div style="padding:12px;padding-top:0;text-align:center;"><button onclick="window.seeMoreDetailsClicked()" style="width:100%;padding:11px;background:linear-gradient(to right,#f8fafc,#f1f5f9);border:2px solid #e2e8f0;border-radius:12px;font-weight:700;color:#475569;font-size:13px;cursor:pointer;font-family:system-ui,sans-serif;" onmouseover="this.style.borderColor='#93c5fd';this.style.color='#2563eb'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#475569'">See More Details →</button></div></div>`;
+    return `<div style="font-family:system-ui,sans-serif;min-width:220px;max-width:280px;padding:0;border-radius:16px;overflow:hidden;background:white;box-shadow:0 10px 25px rgba(0,0,0,0.15);"><div style="background:linear-gradient(135deg,${colors.bg},${colors.border});padding:14px;"><h3 style="margin:0;color:white;font-size:15px;font-weight:800;line-height:1.3;">${post.location_name || post.title || companyName}</h3><div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:rgba(255,255,255,0.25);padding:4px 12px;border-radius:20px;"><span style="color:white;font-size:12px;font-weight:800;">${matchLabel}</span></div></div><div style="padding:12px;background:#fafbfc;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;"><div style="background:white;padding:8px;border-radius:10px;border:1px solid #e5e7eb;"><div style="font-size:9px;color:#9ca3af;font-weight:700;margin-bottom:2px;">Slots</div><div style="font-size:14px;font-weight:800;color:#1f2937;">${post.vacancies ?? 'N/A'}</div></div><div style="background:white;padding:8px;border-radius:10px;border:1px solid #e5e7eb;"><div style="font-size:9px;color:#9ca3af;font-weight:700;margin-bottom:2px;">Distance</div><div style="font-size:12px;font-weight:700;color:${colors.bg};">${userId ? post.knn.distance + ' km' : 'N/A'}</div></div></div><div style="display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to right,#f0fdf4,#fff);padding:8px 12px;border-radius:10px;border:1px solid #bbf7d0;"><span style="font-size:11px;color:#166534;font-weight:600;">⏱ Duration</span><span style="font-size:13px;font-weight:800;color:#15803d;">${post.duration_hours || 'TBA'} hrs</span></div>${statusBadge ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;">${statusBadge}${ojtNoticeBadge}</div>` : ojtNoticeBadge ? `<div style="margin-top:8px;">${ojtNoticeBadge}</div>` : ''}</div><div style="padding:12px;padding-top:0;text-align:center;"><button onclick="window.seeMoreDetailsClicked()" style="width:100%;padding:11px;background:linear-gradient(to right,#f8fafc,#f1f5f9);border:2px solid #e2e8f0;border-radius:12px;font-weight:700;color:#475569;font-size:13px;cursor:pointer;font-family:system-ui,sans-serif;" onmouseover="this.style.borderColor='#93c5fd';this.style.color='#2563eb'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#475569'">See More Details →</button></div></div>`;
   }, [userId, applicationStatuses, hasActiveOJT, activeOJTCompanyId, activeOJTPostId]);
 
   useEffect(() => {
@@ -491,9 +491,9 @@ function ProfileOverlay({ profile, profileLoading, profileError, userId, isTrack
             {isTracking ? (<><div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-30" /><svg className="w-5 h-5 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg></>) : (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><circle cx="12" cy="12" r="3" /><path d="M12 2v4m0 12v4M2 12h4m12 0h4" /></svg>)}
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-sm md:text-base font-bold text-slate-800 truncate">{profileLoading ? '⏳ Loading...' : isTracking ? <span className="text-emerald-600">📍 Live Tracking</span> : profile ? <span className="text-blue-600">👤 {displayName}</span> : !userId ? <span className="text-amber-600">🔒 Sign in to match</span> : <span className="text-slate-500">⏳ Loading profile...</span>}</p>
+            <p className="text-sm md:text-base font-bold text-slate-800 truncate">{profileLoading ? ' Loading...' : isTracking ? <span className="text-emerald-600"> Live Tracking</span> : profile ? <span className="text-blue-600"> {displayName}</span> : !userId ? <span className="text-amber-600">🔒 Sign in to match</span> : <span className="text-slate-500">⏳ Loading profile...</span>}</p>
             <p className="text-[11px] text-slate-400 font-mono truncate mt-1">{studentLoc.lat.toFixed(4)}, {studentLoc.lng.toFixed(4)}</p>
-            {profile && (<p className="text-[11px] text-blue-500 mt-1 font-medium hidden sm:block">{profile.skills.length > 0 && `💼 ${profile.skills.length} skills`}{profile.course && ` · 🎓 ${profile.course}`}</p>)}
+            {profile && (<p className="text-[11px] text-blue-500 mt-1 font-medium hidden sm:block">{profile.skills.length > 0 && ` ${profile.skills.length} skills`}{profile.course && ` ·  ${profile.course}`}</p>)}
             {profileError && (<p className="text-[11px] text-red-500 mt-1 font-medium">⚠️ {profileError}</p>)}
           </div>
           <svg className="w-5 h-5 text-slate-300 group-hover:text-blue-400 group-hover:rotate-90 flex-shrink-0 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -510,7 +510,7 @@ function ProfileOverlay({ profile, profileLoading, profileError, userId, isTrack
             <button type="button" onClick={onClosePopup} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
           </div>
           {!isTracking ? (
-            <button type="button" onClick={() => { onStopTracking(); onDetectLoc(); }} disabled={isLocating} className={`w-full py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm ${isLocating ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:shadow-md active:scale-[0.98]'}`}>{isLocating ? '⏳ Detecting...' : '📍 Detect My Location'}</button>
+            <button type="button" onClick={() => { onStopTracking(); onDetectLoc(); }} disabled={isLocating} className={`w-full py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm ${isLocating ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:shadow-md active:scale-[0.98]'}`}>{isLocating ? ' Detecting...' : 'Press Detect My Location'}</button>
           ) : (
             <button type="button" onClick={onStopTracking} className="w-full py-3 rounded-xl text-sm font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]">⏹ Stop Tracking</button>
           )}
@@ -519,7 +519,7 @@ function ProfileOverlay({ profile, profileLoading, profileError, userId, isTrack
               <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider mb-3">Your Profile</p>
               <div className="flex items-center gap-3 mb-4">
                 {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-10 h-10 rounded-xl border-2 border-white shadow-md object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0">{initial}</div>}
-                <div className="min-w-0"><p className="text-base font-bold text-slate-800 truncate">{displayName}</p>{profile.course && <p className="text-[11px] text-purple-600 truncate mt-0.5">🎓 {profile.course}</p>}</div>
+                <div className="min-w-0"><p className="text-base font-bold text-slate-800 truncate">{displayName}</p>{profile.course && <p className="text-[11px] text-purple-600 truncate mt-0.5"> {profile.course}</p>}</div>
               </div>
               {profile.skills.length > 0 && (
                 <div className="border-t border-blue-100 pt-3">
@@ -912,7 +912,7 @@ export default function MapPage() {
 
   const changeMode = (m: TravelMode) => { setTravelMode(m); if (selectedPostId) setShowRoute(true); };
   const toggleMapStyle = () => setMapStyle(p => p === 'light' ? 'satellite' : 'light');
-  const modes = [{ v: 'walking' as TravelMode, i: '🚶', l: 'Walk' }, { v: 'motorcycle' as TravelMode, i: '🏍️', l: 'Moto' }, { v: 'car' as TravelMode, i: '🚗', l: 'Car' }];
+  const modes = [{ v: 'walking' as TravelMode, i: '𖠘', l: 'Walk' }, { v: 'motorcycle' as TravelMode, i: '🏍', l: 'Motor' }, { v: 'car' as TravelMode, i: '⛐', l: 'Car' }];
 
   const isFullyLoaded = !isAuthLoading && !postsLoading;
   if (!isFullyLoaded) return <SkeletonDashboard />;
@@ -943,7 +943,7 @@ export default function MapPage() {
             <span className="text-[11px] md:text-xs font-bold text-emerald-600">{filteredPosts.length}</span>
             <span className="hidden md:inline text-[10px] font-semibold text-slate-400">posts</span>
           </div>
-          <button type="button" onClick={toggleMapStyle} title={mapStyle === 'light' ? 'Satellite' : 'Map'} className={`flex w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg sm:rounded-xl items-center justify-center text-xs sm:text-sm transition-all border shadow-sm shrink-0 ${mapStyle === 'satellite' ? 'bg-indigo-500 text-white border-indigo-600 shadow-md' : 'bg-white/95 backdrop-blur-md border-slate-200 hover:border-indigo-300'}`}>{mapStyle === 'light' ? '🛰️' : '🌐'}</button>
+          <button type="button" onClick={toggleMapStyle} title={mapStyle === 'light' ? 'Satellite' : 'Map'} className={`flex w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg sm:rounded-xl items-center justify-center text-xs sm:text-sm transition-all border shadow-sm shrink-0 ${mapStyle === 'satellite' ? 'bg-indigo-500 text-white border-white-600 shadow-md' : 'bg-white/95 backdrop-blur-md border-slate-200 hover:border-indigo-300'}`}>{mapStyle === 'light' ? '🛰️' : '🌐'}</button>
           <Link href="/student_main" className="hidden sm:flex w-10 h-10 bg-white/95 backdrop-blur-md rounded-xl shadow-sm items-center justify-center hover:bg-white transition-all border border-white/60 shrink-0"><svg className="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg></Link>
           <div className="flex items-center gap-1 sm:gap-1.5">
             <div className="relative bg-white rounded-full shadow-md border border-white/80"><NotificationBell /></div>
@@ -998,9 +998,9 @@ export default function MapPage() {
                       <div className="flex-1 min-w-0">
                         <h4 className="font-semibold text-sm text-slate-800 truncate group-hover:text-blue-600">{post.location_name || post.title || post.company_name || post.companies?.company_name || 'Untitled'}</h4>
                         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: c.bg }}>🎯 {userId ? k.skillMatch + '%' : '—'}</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: c.bg }}> {userId ? k.skillMatch + '%' : '—'}</span>
                           <span className="text-[10px] text-slate-400">{userId ? k.distance + ' km' : ''}</span>
-                          {k.courseMatch && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">🎓</span>}
+                          {k.courseMatch && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700"></span>}
                         </div>
                       </div>
                     </button>
@@ -1044,7 +1044,7 @@ export default function MapPage() {
                     {selectedPost._courseMatch && selectedPost.course_category && (<span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-[10px] font-bold border border-purple-200"><span className="w-1 h-1 bg-purple-500 rounded-full animate-pulse" />Matched Course</span>)}
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-bold border-emerald-200"><span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />Active</span>
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-semibold">{selectedPost.work_mode || selectedPost.work_type || 'On-Site'}</span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full text-[10px] font-bold shadow-sm">🎯 {userId ? `${selectedPost._skillMatch ?? 0}% Match` : 'Sign in'}</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-blue-500 text-white rounded-full text-[10px] font-bold shadow-sm">{userId ? `${selectedPost._skillMatch ?? 0}% Match` : 'Sign in'}</span>
                   </div>
                 </div>
               </div>
@@ -1071,10 +1071,10 @@ export default function MapPage() {
                   <div className="bg-white rounded-xl p-2.5 border border-slate-200"><p className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Status</p><p className="text-xs font-semibold flex items-center gap-1.5">{(() => { const n = appStatus?.toLowerCase(); if (n === 'accepted' || n === 'approved') return <><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /><span className="text-emerald-700">Current OJT</span></>; if (n === 'pending') return <><span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" /><span className="text-amber-600">Pending</span></>; if (n === 'rejected') return <><span className="w-1.5 h-1.5 bg-red-500 rounded-full" /><span className="text-red-600">Rejected</span></>; if (n === 'completed') return <><span className="w-1.5 h-1.5 bg-blue-500 rounded-full" /><span className="text-blue-700">Completed</span></>; return <><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /><span className="text-emerald-600">Accepting</span></>; })()}</p></div>
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
-                  {selectedPost.vacancies != null && <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${Number(selectedPost.vacancies) <= 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>💼 {Number(selectedPost.vacancies) <= 0 ? 'No Slots' : `${selectedPost.vacancies} slots`}</span>}
+                  {selectedPost.vacancies != null && <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${Number(selectedPost.vacancies) <= 0 ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}> {Number(selectedPost.vacancies) <= 0 ? 'No Slots' : `${selectedPost.vacancies} slots`}</span>}
                   {selectedPost.duration_hours && <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold border-blue-200">⏱ {selectedPost.duration_hours} hrs</span>}
-                  {selectedPost.allowance_type && (<span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${selectedPost.allowance_type === 'Paid' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>💰 {selectedPost.allowance_type}</span>)}
-                  {selectedPost.course_category && <span className="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-bold border border-purple-200">🎓 {selectedPost.course_category}</span>}
+                  {selectedPost.allowance_type && (<span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${selectedPost.allowance_type === 'Paid' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{selectedPost.allowance_type}</span>)}
+                  {selectedPost.course_category && <span className="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-bold border border-purple-200"> {selectedPost.course_category}</span>}
                 </div>
               </div>
             )}
@@ -1082,7 +1082,7 @@ export default function MapPage() {
             <div className="flex-1 overflow-y-auto overscroll-contain px-4 md:px-6 py-4 space-y-4 scrollbar-thin">
               <div className="p-4 rounded-2xl border-2 relative overflow-hidden" style={{ borderColor: ROUTE_STYLES[travelMode].color, backgroundColor: `${ROUTE_STYLES[travelMode].color}08` }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">🧭 Route{isTracking && <span className="text-[10px] font-normal text-emerald-600 animate-pulse">● Live</span>}</h3>
+                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">⏲ Route{isTracking && <span className="text-[10px] font-normal text-emerald-600 animate-pulse">● Live</span>}</h3>
                   <div className="flex bg-white rounded-xl p-0.5 gap-0.5 shadow-sm border border-slate-100">
                     {modes.map(m => (<button key={m.v} type="button" onClick={() => changeMode(m.v)} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${travelMode === m.v ? 'text-white shadow-md scale-105' : 'text-slate-500 hover:bg-slate-50'}`} style={travelMode === m.v ? { backgroundColor: ROUTE_STYLES[m.v].color } : {}}>{m.i} {m.l}</button>))}
                   </div>
@@ -1098,8 +1098,8 @@ export default function MapPage() {
               </div>
               <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl p-4 border border-slate-200">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center"><svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><polyline points="20 6 9 17 4 4" /></svg></div><h3 className="font-bold text-slate-800 text-sm">Required Skills</h3></div>
-                  <span className="text-[10px] font-bold bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-2.5 py-1 rounded-full shadow-sm">{userId ? `${selectedPost._skillMatch ?? 0}% Match` : 'Sign in'}</span>
+                  <h3 className="font-bold text-slate-800 text-sm">Required Skills</h3>
+                  <span className="text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-blue-500 text-white px-2.5 py-1 rounded-full shadow-sm">{userId ? `${selectedPost._skillMatch ?? 0}% Match` : 'Sign in'}</span>
                 </div>
                 {(() => {
                   const ns: string[] = []; const add = (s: string) => { const c = s.trim(); if (c && !ns.includes(c)) ns.push(c); };

@@ -167,7 +167,7 @@ export default function CompanyCertificateButton(props: Props) {
       // 8) ✅ ONLY 1 notification to student
       await supabase.from('notifications').insert({
         user_id: props.studentId,
-        title: 'Certificate Ready 🎓',
+        title: 'Certificate Ready ',
         message: `Your certificate from ${props.companyName} is ready. Certificate No: ${certNum}`,
         type: 'certificate',
         is_read: false,

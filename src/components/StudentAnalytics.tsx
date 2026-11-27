@@ -217,7 +217,7 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shrink-0 shadow-md">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shrink-0 shadow-md">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           </div>
           <div><h2 className="font-bold text-base sm:text-lg text-slate-800">My Analytics</h2><p className="text-xs text-slate-500 mt-0.5">Track your OJT progress and application performance</p></div>
@@ -240,7 +240,7 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
             <p className="text-2xl font-bold text-slate-800">{metrics.totalHours}<span className="text-sm font-normal text-slate-400 ml-1">/ {metrics.requiredHours}h</span></p>
             <p className="text-[10px] text-slate-400 mt-1">{Math.max(0, metrics.requiredHours - metrics.totalHours)}h remaining</p>
             {postTitle && (
-              <p className="text-[10px] text-slate-500 mt-1 truncate">📌 {postTitle}</p>
+              <p className="text-[10px] text-slate-500 mt-1 truncate"> {postTitle}</p>
             )}
             {postDurationHours && profile?.required_hours && postDurationHours !== profile.required_hours && (
               <p className="text-[9px] text-slate-400 mt-0.5">(School requires {profile.required_hours}h)</p>
@@ -250,8 +250,8 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
 
         <div className="lg:col-span-2 grid grid-cols-2 gap-3">
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Attendance Streak</p><span className="text-base">🔥</span></div>
-            <p className="text-3xl font-bold text-orange-600">{metrics.streak}</p>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Attendance Streak</p><span className="text-base">♨</span></div>
+            <p className="text-3xl font-bold text-blue-600">{metrics.streak}</p>
             <p className="text-[10px] text-slate-400 mt-1">consecutive days</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
@@ -260,13 +260,13 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
             <p className="text-[10px] text-slate-400 mt-1">{metrics.rejectedCount} rejected</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Success Rate</p><span className="text-base">🎯</span></div>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">Success Rate</p><span className="text-base">𖦏</span></div>
             <p className="text-3xl font-bold text-blue-600">{metrics.totalApps > 0 ? Math.round(metrics.successRate) : 0}%</p>
             <p className="text-[10px] text-slate-400 mt-1">{metrics.accepted} of {metrics.totalApps} accepted</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">OJT Status</p><span className="text-base">📌</span></div>
-            <p className="text-base font-bold text-purple-600 capitalize truncate">{profile.ojt_status || 'Not Started'}</p>
+            <div className="flex items-center justify-between mb-2"><p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">OJT Status</p><span className="text-base">𖡡</span></div>
+            <p className="text-base font-bold text-emerald-600 capitalize truncate">{profile.ojt_status || 'Not Started'}</p>
             <p className="text-[10px] text-slate-400 mt-1">{profile.course || 'No course set'}</p>
           </div>
         </div>
@@ -275,7 +275,7 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center"><svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">🗒</div>
             <h3 className="font-bold text-sm text-slate-800">Attendance History</h3>
           </div>
           <span className="text-[10px] text-slate-400">Last 6 months</span>
@@ -299,7 +299,7 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center"><svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
+            <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center"><svg className="w-4 h-4-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
             <h3 className="font-bold text-sm text-slate-800">Application Breakdown</h3>
           </div>
           <span className="text-[10px] text-slate-400">{metrics.totalApps} total</span>
@@ -328,19 +328,7 @@ export default function StudentAnalytics({ studentId }: { studentId: string }) {
         )}
       </div>
 
-      {profile.skills && profile.skills.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center"><svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg></div>
-            <h3 className="font-bold text-sm text-slate-800">Your Skills</h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {profile.skills.map((skill, i) => (
-              <span key={i} className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 text-xs font-semibold rounded-full border border-purple-100">{skill}</span>
-            ))}
-          </div>
-        </div>
-      )}
+     
 
       <style jsx>{`
         @keyframes slide-in { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }

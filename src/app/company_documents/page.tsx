@@ -336,7 +336,7 @@ if (error) {
               <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-orange-100 shadow-sm hover:shadow-md transition-shadow">
                 
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-14 h-14 bg-orange-50 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">📄</div>
+                  <div className="w-14 h-14 bg-orange-50 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">🗎</div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-base">Business Permit</h4>
                     <p className="text-sm text-slate-500 mt-0.5">Local government operation permit</p>
@@ -412,7 +412,7 @@ if (error) {
               <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-indigo-100 shadow-sm hover:shadow-md transition-shadow">
                 
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-14 h-14 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">🛡️</div>
+                  <div className="w-14 h-14 bg-indigo-50 rounded-xl flex items-center  justify-center flex-shrink-0 text-2xl">⛨</div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-base">SEC / DTI Registration</h4>
                     <p className="text-sm text-slate-500 mt-0.5">Corporate or business registration</p>
@@ -487,7 +487,7 @@ if (error) {
               <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-pink-100 shadow-sm hover:shadow-md transition-shadow">
                 
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-14 h-14 bg-pink-50 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">🏛️</div>
+                  <div className="w-14 h-14 bg-pink-50 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl">🏛</div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-base">BIR Form 2303 (COR)</h4>
                     <p className="text-sm text-slate-500 mt-0.5">Tax registration certificate</p>
@@ -573,7 +573,7 @@ if (error) {
 
             {totalDocsUploaded === 3 && (
               <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-center">
-                <p className="text-green-700 font-semibold">✅ All Required Documents Uploaded!</p>
+                <p className="text-green-700 font-semibold"> All Required Documents Uploaded!</p>
                 <p className="text-sm text-green-600 mt-1">Your account verification is under review.</p>
               </div>
             )}
@@ -607,8 +607,8 @@ if (error) {
                   previewDoc.type === 'sec_dti' ? 'bg-indigo-100' :
                   'bg-pink-100'
                 }`}>
-                  {previewDoc.type === 'business_permit' ? '📄' :
-                   previewDoc.type === 'sec_dti' ? '🛡️' : '🏛️'}
+                  {previewDoc.type === 'business_permit' ? '🗎' :
+                   previewDoc.type === 'sec_dti' ? '⛨' : '🏛'}
                 </div>
                 
                 <div>
@@ -805,34 +805,7 @@ function NavLink({
   label: string; 
   isActive?: boolean;
 }) {
-  const icons: Record<string, React.ReactElement> = {
-    grid: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2-2h-2a2 2 0 01-2-2v-2z" />
-      </svg>
-    ),
-    file: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V17a2 2 0 01-2 2z" />
-      </svg>
-    ),
-    plus: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    users: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-    ),
-    settings: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    )
-  };
+ 
 
   return (
     <Link 
@@ -841,7 +814,7 @@ function NavLink({
         isActive ? 'text-white bg-teal-600' : 'text-slate-600 hover:bg-slate-50'
       }`}
     >
-      {icons[icon]}
+      
       {label}
     </Link>
   );

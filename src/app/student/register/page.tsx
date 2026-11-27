@@ -164,18 +164,18 @@ export default function UserRegister() {
   if (verificationPending) {
     return (
       <div className="min-h-screen flex font-sans overflow-x-hidden">
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-tr from-indigo-600 to-purple-600 relative overflow-hidden justify-center items-center">
-          <div className="absolute top-10 left-10 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-          <div className="absolute top-32 right-10 w-72 h-72 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-indigo-900 relative overflow-hidden justify-center items-center">
+          <div className="absolute top-10 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+          <div className="absolute top-32 right-10 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
           <div className="relative z-10 text-center text-white p-8">
             <h1 className="text-4xl font-bold mb-4">Almost there!</h1>
-            <p className="text-lg text-indigo-100">Verify your email to complete registration.</p>
+            <p className="text-lg text-blue-100">Verify your email to complete registration.</p>
           </div>
         </div>
 
         <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-6 relative">
-          <Link href="/" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group z-20">
+          <Link href="/" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-blue-600 transition-colors font-medium text-sm group z-20">
             <svg className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             Back
           </Link>
@@ -194,7 +194,7 @@ export default function UserRegister() {
               <p className="text-gray-500 text-sm leading-relaxed mb-2">
                 We sent a verification link to
               </p>
-              <p className="text-indigo-600 font-bold text-sm mb-4 break-all">
+              <p className="text-blue-600 font-bold text-sm mb-4 break-all">
                 {formData.email}
               </p>
               <p className="text-gray-400 text-xs leading-relaxed mb-6">
@@ -211,7 +211,7 @@ export default function UserRegister() {
                 className={`w-full py-3 rounded-xl font-semibold transition-all mb-3 ${
                   resendStatus === 'sent'
                     ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                    : 'bg-white border-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 active:scale-[0.98]'
+                    : 'bg-white border-2 border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300 active:scale-[0.98]'
                 }`}
               >
                 {resendStatus === 'sending' ? (
@@ -232,7 +232,7 @@ export default function UserRegister() {
               {/* Continue to Login */}
               <Link
                 href="/student/login"
-                className="block w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 text-center"
+                className="block w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 text-center"
               >
                 I've verified — Sign In →
               </Link>
@@ -270,14 +270,14 @@ export default function UserRegister() {
     <div className="min-h-screen flex font-sans overflow-x-hidden">
 
       {/* Left Side - Visuals */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-tr from-indigo-600 to-purple-600 relative overflow-hidden justify-center items-center">
-         <div className="absolute top-10 left-10 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-        <div className="absolute top-32 right-10 w-72 h-72 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 to-indigo-900 relative overflow-hidden justify-center items-center">
+         <div className="absolute top-10 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+        <div className="absolute top-32 right-10 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
 
         <div className="relative z-10 text-center text-white p-8">
           <h1 className="text-4xl font-bold mb-4">Join Our Community</h1>
-          <p className="text-lg text-indigo-100">Create an account to start your professional journey.</p>
+          <p className="text-lg text-blue-100">Create an account to start your professional journey.</p>
         </div>
       </div>
 
@@ -285,7 +285,7 @@ export default function UserRegister() {
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-6 relative">
 
         {/* Back Button */}
-        <Link href="/" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-indigo-600 transition-colors font-medium text-sm group z-20">
+        <Link href="/" className="absolute top-6 left-6 flex items-center text-gray-500 hover:text-blue-600 transition-colors font-medium text-sm group z-20">
             <svg className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             Back
         </Link>
@@ -323,7 +323,7 @@ export default function UserRegister() {
                   value={formData.fullName}
                   onChange={handleChange}
                   placeholder="Juan Dela Cruz"
-                  className="w-full pl-4 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition shadow-sm"
+                  className="w-full pl-4 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
                   required
                 />
               </div>
@@ -337,7 +337,7 @@ export default function UserRegister() {
                   value={formData.email}
                   onChange={handleChange}
                   placeholder="you@example.com"
-                  className="w-full pl-4 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition shadow-sm"
+                  className="w-full pl-4 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
                   required
                 />
               </div>
@@ -352,7 +352,7 @@ export default function UserRegister() {
                         value={formData.password}
                         onChange={handleChange}
                         placeholder='Min. 6 characters'
-                        className={`w-full pl-4 pr-12 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition shadow-sm ${
+                        className={`w-full pl-4 pr-12 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${
                           formData.password && formData.password.length < 6 ? 'border-red-300' : 'border-gray-200'
                         }`}
                         required
@@ -360,7 +360,7 @@ export default function UserRegister() {
                     <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-indigo-600"
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600"
                     >
                     {showPassword ? (
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
@@ -387,7 +387,7 @@ export default function UserRegister() {
                         value={formData.confirmPassword}
                         onChange={handleChange}
                         placeholder='Re-enter password'
-                        className={`w-full pl-4 pr-12 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition shadow-sm ${
+                        className={`w-full pl-4 pr-12 py-3 bg-white border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${
                           formData.confirmPassword && formData.password !== formData.confirmPassword
                             ? 'border-red-400 focus:ring-red-500'
                             : 'border-gray-200'
@@ -397,7 +397,7 @@ export default function UserRegister() {
                     <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-indigo-600"
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600"
                     >
                     {showConfirmPassword ? (
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path></svg>
@@ -446,7 +446,7 @@ export default function UserRegister() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full py-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 mt-4 flex items-center justify-center gap-2 ${
+                className={`w-full py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 mt-4 flex items-center justify-center gap-2 ${
                   isLoading ? 'opacity-70 cursor-not-allowed' : ''
                 }`}
               >
@@ -473,7 +473,7 @@ export default function UserRegister() {
           {/* Login Link */}
           <p className="text-center text-gray-600">
             Already have an account?{' '}
-            <Link href="/student/login" className="font-semibold text-indigo-600 hover:text-indigo-500 hover:underline">
+            <Link href="/student/login" className="font-semibold text-blue-600 hover:text-blue-700 hover:underline">
               Sign In
             </Link>
           </p>

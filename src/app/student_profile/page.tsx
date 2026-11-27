@@ -749,7 +749,7 @@ export default function ProfilePage() {
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <NotificationBell />
             <Link href="/" className="flex items-center gap-1.5 sm:gap-2 text-lg sm:text-xl font-bold text-slate-900">
-              <span className="text-blue-600 text-base sm:text-xl">◉</span>
+              <span className="text-blue-600 text-base sm:text-xl"></span>
               <span className="hidden xs:inline">OJTly</span>
             </Link>
           </div>
@@ -776,11 +776,8 @@ export default function ProfilePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                   </svg>
                   <span className="truncate">{user.location === 'Not specified' ? 'Set location' : user.location}</span>
-                  <button onClick={detectLocation} className="shrink-0 p-1 bg-white/20 hover:bg-white/30 rounded-full transition-all ml-1" title="Detect my location">
-                    <svg className={`w-3 h-3 ${user.location !== 'Not specified' ? 'text-green-300' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
-                    </svg>
+                  <button onClick={detectLocation} className="shrink-0 p-2.5 bg-white/20 hover:bg-white/30 rounded-full transition-all ml-1" title="Detect my location">
+                   Location ⚙
                   </button>
                 </div>
                 {(() => {

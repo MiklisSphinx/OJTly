@@ -37,41 +37,6 @@ interface OJTPost {
   };
 }
 
-// ==========================================
-// CUSTOM SVG LOGO COMPONENT
-// ==========================================
-const OJTLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 40 40" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <defs>
-      <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#3b82f6" />
-        <stop offset="100%" stopColor="#6366f1" />
-      </linearGradient>
-      <filter id="logoShadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.15"/>
-      </filter>
-    </defs>
-    <path 
-      d="M20 4C12.268 4 6 10.268 6 18C6 25.5 20 36 20 36C20 36 34 25.5 34 18C34 10.268 27.732 4 20 4Z" 
-      fill="url(#logoGrad)"
-      filter="url(#logoShadow)"
-    />
-    <circle cx="20" cy="18" r="8" fill="white" opacity="0.95"/>
-    <path 
-      d="M16 18L18.5 20.5L24 15" 
-      stroke="url(#logoGrad)" 
-      strokeWidth="2.5" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    />
-    <circle cx="28" cy="10" r="3" fill="#fbbf24" />
-  </svg>
-);
 
 // ==========================================
 // SVG ICON COMPONENTS
@@ -159,13 +124,6 @@ const ArrowLeftIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 const CheckCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const LockClosedIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4m8 0v4" />
   </svg>
 );
 
@@ -1124,7 +1082,7 @@ export default function StudentMainPage() {
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-lg border-b border-slate-200/80 h-14 sm:h-16">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-2 sm:gap-4">
          <div className="flex items-center gap-1.5 sm:gap-2.5 text-lg sm:text-xl font-bold text-slate-900 cursor-default">
-  <OJTLogo className="w-7 h-7 sm:w-8 sm:h-8" />
+<div className="w-7 h-7 sm:w-8 sm:h-8" ></div>
   <span className="hidden xs:inline">OJTly</span>
 </div>
 
@@ -1232,7 +1190,7 @@ export default function StudentMainPage() {
               
               {hasActiveOJT && (
                 <span className="flex items-center gap-1.5 px-3 py-1 bg-yellow-400/20 text-yellow-200 rounded-full border border-yellow-300/50">
-                  <LockClosedIcon className="w-3.5 h-3.5" />
+             
                   <span className="hidden sm:inline font-semibold">Enrolled at {activeOJTCompany}</span>
                   <span className="sm:hidden font-semibold">OJT Active</span>
                 </span>
@@ -1321,7 +1279,7 @@ export default function StudentMainPage() {
                               {/* 2. Dynamic Notice Badges */}
                               {isThisActiveOJT ? (
                                 <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 border border-purple-200">
-                                  ⭐ Current OJT
+                                   Current OJT
                                 </span>
                               ) : hasActiveOJT && activeOJTCompany === post.companies?.company_name ? (
                                 <span className="inline-flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-md font-bold bg-blue-100 text-blue-700 border border-blue-200">
@@ -1386,7 +1344,7 @@ export default function StudentMainPage() {
                           
                           {isActiveOJTPost(selectedPost.id) && (
                             <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold border border-purple-200">
-                              <LockClosedIcon className="w-4 h-4" />
+                            
                               Your Current OJT
                             </div>
                           )}
@@ -1550,7 +1508,7 @@ export default function StudentMainPage() {
                       if (hasActiveOJT) {
                         return (
                           <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-slate-100 text-slate-400 font-semibold rounded-lg sm:rounded-xl border-2 border-slate-200 cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm italic">
-                            <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                         
                             Already Enrolled Elsewhere
                           </button>
                         );
@@ -1577,7 +1535,7 @@ export default function StudentMainPage() {
                       if ((selectedPost.vacancies ?? 0) <= 0) {
                         return (
                           <button disabled className="w-full sm:flex-1 py-2.5 sm:py-3.5 bg-red-50 text-red-600 border-2 border-red-200 font-bold rounded-lg sm:rounded-xl cursor-not-allowed flex items-center justify-center gap-2 text-xs sm:text-sm">
-                            <LockClosedIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                           
                             No Slots Available
                           </button>
                         );
@@ -1615,16 +1573,13 @@ export default function StudentMainPage() {
               </div>
             ) : (
               <div className="bg-white rounded-xl sm:rounded-3xl shadow-sm border border-slate-100 p-8 sm:p-12 text-center">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-50 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-5 border border-slate-100">
-                  <OJTLogo className="w-8 h-8 sm:w-10 sm:h-10 opacity-30" />
-                </div>
                 <h3 className="text-base sm:text-xl font-bold text-slate-700 mb-2">Select a Position</h3>
                 <p className="text-slate-500 text-xs sm:text-sm max-w-xs sm:max-w-sm mx-auto">Choose an opportunity from the list above to view full details and apply.</p>
                 
                 {hasActiveOJT && (
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <div className="flex items-center gap-2 text-amber-700 text-xs font-medium">
-                      <LockClosedIcon className="w-4 h-4 shrink-0" />
+                    
                       You're currently enrolled in an OJT at <strong>{activeOJTCompany}</strong>. Complete it before applying to new positions.
                     </div>
                   </div>

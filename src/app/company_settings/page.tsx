@@ -343,7 +343,6 @@ export default function CompanySettingsPage() {
                 {!logoPreview ? (
                   <div onDrop={handleDrop} onDragOver={handleDragOver} onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-teal-400">
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-                    <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">📷</div>
                     <p className="font-semibold text-slate-700">Click to upload</p>
                     <p className="text-xs text-slate-400 mt-1">PNG, JPG max 2MB</p>
                   </div>
@@ -369,7 +368,7 @@ export default function CompanySettingsPage() {
                   <h2 className="text-lg font-bold text-slate-800">Company Information</h2>
                   <p className="text-xs text-slate-500 mt-1">Auto-filled from registration data</p>
                 </div>
-                <button type="button" onClick={handleSync} className="shrink-0 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 active:scale-95 transition-transform">🔄 Refresh</button>
+                <button type="button" onClick={handleSync} className="shrink-0 bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-teal-700 active:scale-95 transition-transform">↻ Refresh</button>
               </div>
               <div className="p-6 space-y-5">
                 <div>
@@ -377,7 +376,7 @@ export default function CompanySettingsPage() {
                   <input type="text" name="name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Tech Solutions Inc." className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-teal-500 outline-none" required />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded">🔒 Cannot change</span></label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded">🔒︎ Cannot change</span></label>
                   <input type="email" name="email" value={email} readOnly className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-100 text-slate-600 cursor-not-allowed outline-none" />
                   <p className="text-xs text-slate-400 mt-1">Contact support to change email</p>
                 </div>

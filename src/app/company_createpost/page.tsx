@@ -186,11 +186,6 @@ const MapPinIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   </svg>
 );
 
-const RocketIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 2.84m5.96 11.53L15.59 14.37m0 0L21 21M3 3l3.59 3.59m0 0A6 6 0 0014.37 9.63V4.8m-7.78 2.79L3 3m11.37 6.63L21 21" />
-  </svg>
-);
 
 const CheckIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,6 +211,23 @@ export default function CreatePostPage() {
   } | null>(null);
 
   useLeafletIcons();
+
+  // ✅ FIX: Clean up any leftover Leaflet map instances before mounting
+  // Prevents "Map container is being reused by another instance" error
+  useEffect(() => {
+    return () => {
+      const containers = document.querySelectorAll(".leaflet-container");
+      containers.forEach((c) => {
+        if ((c as any)._leaflet_id) {
+          try {
+            (c as any)._leaflet_map?.remove();
+            delete (c as any)._leaflet_id;
+            c.innerHTML = "";
+          } catch (e) {}
+        }
+      });
+    };
+  }, []);
 
   // ADD STATE FOR COMPANY DB ID
   const [companyDbId, setCompanyDbId] = useState<string>('');
@@ -708,32 +720,26 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
 
         <nav className="p-4 space-y-1">
           <Link href="/company_main" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
             Dashboard
           </Link>
           
           <Link href="/company_ojtpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             My OJT Posts
           </Link>
 
           <Link href="/company_createpost" className="flex items-center gap-3 px-4 py-3 text-white bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg font-medium shadow-sm shadow-teal-200">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             Create Post
           </Link>
 
           <Link href="/company_applicants" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
             Applicants
           </Link>
 
           <Link href="/company_documents" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
             Documents
           </Link>
 
           <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             Settings
           </Link>
         </nav>
@@ -1227,25 +1233,25 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                         onClick={() => setMapLayer('standard')}
                         className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'standard' ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                       >
-                        🗺️ Standard
+                        🗺 Stan
                       </button>
                       <button
                         type="button"
                         onClick={() => setMapLayer('grey')}
                         className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'grey' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                       >
-                        🎨 Grey
+                        ᝰ🖌 Grey
                       </button>
                       <button
                         type="button"
                         onClick={() => setMapLayer('satellite')}
                         className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'satellite' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                       >
-                        🛰️ Satellite
+                        🛰 Satellite
                       </button>
                     </div>
                     
-                    <MapContainer center={mapCenter} zoom={13} className="h-full w-full z-10" style={{ width: '100%', height: '100%' }} scrollWheelZoom={true} zoomControl={true}>
+                    <MapContainer key="create-post-map" center={mapCenter} zoom={13} className="h-full w-full z-10" style={{ width: '100%', height: '100%' }} scrollWheelZoom={true} zoomControl={true}>
                       
                       {/* DYNAMIC TILE LAYER BASED ON SELECTION */}
                       <TileLayer 
@@ -1254,7 +1260,7 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                           mapLayer === 'standard' 
                             ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
                             : mapLayer === 'grey'
-                            ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+                            ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
                             : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
                         }
                       />
@@ -1264,7 +1270,7 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                        // ✅ CORRECT: Removed invalid 'transparent' prop
 <TileLayer 
   attribution='&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors' 
-  url='https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png'
+  url='https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
   zIndex={1000}
 />
                       )}
@@ -1309,7 +1315,7 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                   </>
                 ) : (
                   <>
-                    <RocketIcon className="w-5 h-5" />
+               
                     Publish Instantly
                   </>
                 )}

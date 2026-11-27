@@ -162,10 +162,10 @@ export default function StudentSupportWidget() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Contact support"
-        className="fixed bottom-6 right-6 z-40 group flex items-center gap-2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white px-4 py-3 rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 font-semibold"
+        className="fixed bottom-6 right-6 z-40 group flex items-center gap-2 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 text-white px-4 py-3 rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 font-semibold"
       >
         {/* Pulse ring */}
-        <span className="absolute inset-0 rounded-full bg-purple-400 animate-ping opacity-20 group-hover:opacity-0"></span>
+        <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-20 group-hover:opacity-0"></span>
 
         <svg className="w-5 h-5 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM10 9v6m4-6v6" />
@@ -186,9 +186,9 @@ export default function StudentSupportWidget() {
             className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
           >
             {/* Header */}
-            <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-between sticky top-0 z-10">
+            <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 flex items-center justify-between sticky top-0 z-10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
                   <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM10 9v6m4-6v6" />
                   </svg>
@@ -219,7 +219,7 @@ export default function StudentSupportWidget() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-bold text-slate-800 mb-2">Message Sent! 🎉</h3>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">Message Sent! </h3>
                 <p className="text-sm text-slate-500 mb-1">
                   Thanks for reaching out, {name.split(' ')[0]}!
                 </p>
@@ -251,7 +251,7 @@ export default function StudentSupportWidget() {
                     required
                     disabled={submitting}
                     placeholder="Juan Dela Cruz"
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 outline-none transition-all disabled:opacity-50"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -268,7 +268,7 @@ export default function StudentSupportWidget() {
                     required
                     disabled={submitting}
                     placeholder="juan@example.com"
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 outline-none transition-all disabled:opacity-50"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none transition-all disabled:opacity-50"
                   />
                 </div>
 
@@ -283,7 +283,7 @@ export default function StudentSupportWidget() {
                     onChange={(e) => setSubject(e.target.value)}
                     required
                     disabled={submitting}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 outline-none transition-all disabled:opacity-50"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none transition-all disabled:opacity-50"
                   >
                     <option value="">Choose a topic…</option>
                     <option value="Account & Login Issues">Account & Login Issues</option>
@@ -311,7 +311,7 @@ export default function StudentSupportWidget() {
                     rows={4}
                     minLength={10}
                     placeholder="Describe your issue or question in detail…"
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 outline-none transition-all resize-none disabled:opacity-50"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none transition-all resize-none disabled:opacity-50"
                   />
                 </div>
 
@@ -329,7 +329,7 @@ export default function StudentSupportWidget() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-2"
                 >
                   {submitting ? (
                     <>

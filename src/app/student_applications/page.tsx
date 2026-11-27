@@ -127,7 +127,7 @@ export default function ApplicationHistoryPage() {
           <div className="flex items-center gap-2 shrink-0">
             <NotificationBell />
             <Link href="/" className="text-lg sm:text-xl font-bold text-slate-900">
-              <span className="text-blue-600">◉</span> <span className="hidden xs:inline">OJTly</span>
+              <span className="text-blue-600"></span> <span className="hidden xs:inline">OJTly</span>
             </Link>
           </div>
         </div>

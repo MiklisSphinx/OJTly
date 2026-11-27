@@ -179,10 +179,7 @@ export default function WelcomeGuide({ variant = 'student' }: { variant?: Varian
           >
             {/* Top bar */}
             <div className="flex shrink-0 items-center justify-between px-5 pt-5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500 px-3 py-1 text-xs font-bold text-white">
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                Welcome
-              </span>
+           
               <button onClick={closeWelcome} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" aria-label="Close">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -191,9 +188,7 @@ export default function WelcomeGuide({ variant = 'student' }: { variant?: Varian
             {/* Body */}
             <div className="px-5 pb-5 pt-3">
               <div className="mb-4 text-center">
-                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
-                  <span className="text-2xl font-black text-white">O</span>
-                </div>
+               
                 <h2 className="text-xl font-bold text-slate-900">Welcome to OJTly!</h2>
                 <p className="mt-1 text-sm font-semibold text-blue-600">{WELCOME_SUBTITLES[variant]}</p>
                 <p className="mt-2 text-xs leading-relaxed text-slate-500">{WELCOME_TEXTS[variant]}</p>
