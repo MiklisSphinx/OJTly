@@ -1,46 +1,58 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { LeafletMouseEvent } from 'leaflet';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import DraggableChatButton from '@/components/DraggableChatButton';
 
-
 // IMPORT SUPABASE CLIENT
 import { createClient } from '@/utils/supabase/client';
 import CompanyNotificationBell from '@/components/CompanyNotificationBell';
 import CompanyChat from '@/components/CompanyChat';
 
-const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false });
-
-const useMapEvents = () => {
-  const { useMapEvents: _useMapEvents } = require('react-leaflet');
-  return _useMapEvents;
-};
-
-const useMap = () => {
-  const { useMap: _useMap } = require('react-leaflet');
-  return _useMap;
-};
-
-// Fix for default marker icons in Next.js/Webpack (client-only)
-function useLeafletIcons() {
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const L = require('leaflet');
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    });
-  }, []);
-}
+// =============================================================
+// ✅ FIX: ONE dynamic import for the ENTIRE map tree.
+//
+// Old code (slow):
+//   - 3 separate dynamic() imports for MapContainer / TileLayer / Marker
+//     → 3 separate JS chunks → 3 network roundtrips
+//   - useMapEvents/useMap wrappers that called require('react-leaflet')
+//     at runtime → synchronous main-thread block on first render
+//   - useLeafletIcons hook that called require('leaflet') at runtime
+//
+// New code (fast):
+//   - One dynamic() import of CreatePostMap.tsx, which bundles
+//     MapContainer + TileLayer + Marker + useMap + useMapEvents +
+//     LocationPicker + MapController into ONE JS chunk.
+//   - No require(), no synchronous blocking.
+//   - Shows a skeleton while the chunk loads so the user sees
+//     immediate feedback instead of an empty box.
+// =============================================================
+const CreatePostMap = dynamic(() => import('@/components/CreatePostMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full flex items-center justify-center bg-slate-100">
+      <div className="flex flex-col items-center gap-2 text-slate-400">
+        <svg
+          className="animate-spin h-8 w-8"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+        <span className="text-sm font-medium">Loading map…</span>
+      </div>
+    </div>
+  ),
+});
 
 // Debounce Hook for Autocomplete
 function useDebounce<T>(value: T, delay: number): T {
@@ -54,68 +66,20 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-// Component to handle clicking on the map
-function LocationPicker({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  const _useMapEvents = useMapEvents();
-  _useMapEvents({
-    click(e: LeafletMouseEvent) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// Component to move the map when search/GPS is used
-function MapController({ center }: { center: [number, number] }) {
-  const _useMap = useMap();
-  const map = _useMap();
-  
-  useEffect(() => {
-    if (map) {
-      map.flyTo(center, map.getZoom());
-    }
-  }, [center, map]);
-  
-  return null;
-}
-
 // ==========================================
 // CUSTOM SVG LOGO COMPONENT
 // ==========================================
-const OJTLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 40 40" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
+const OJTLogo = ({ className = 'w-8 h-8' }: { className?: string }) => (
+  <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
       <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#14b8a6" />
         <stop offset="100%" stopColor="#059669" />
       </linearGradient>
       <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.2"/>
+        <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.2" />
       </filter>
     </defs>
-    
-    <path 
-      d="M20 4C12.268 4 6 10.268 6 18C6 25.5 20 36 20 36C20 36 34 25.5 34 18C34 10.268 27.732 4 20 4Z" 
-      fill="url(#logoGradient)"
-      filter="url(#shadow)"
-    />
-    
-    <circle cx="20" cy="18" r="8" fill="white" opacity="0.95"/>
-    
-    <path 
-      d="M16 18L18.5 20.5L24 15" 
-      stroke="url(#logoGradient)" 
-      strokeWidth="2.5" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    />
-    
-    <circle cx="28" cy="10" r="3" fill="#fbbf24" />
   </svg>
 );
 
@@ -123,43 +87,43 @@ const OJTLogo = ({ className = "w-8 h-8" }: { className?: string }) => (
 // SVG ICON COMPONENTS (No Emojis!)
 // ==========================================
 
-const CheckCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const CheckCircleIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
-const XCircleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const XCircleIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
-const AlertTriangleIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const AlertTriangleIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
   </svg>
 );
 
-const LockIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+const LockIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
   </svg>
 );
 
-const CodeIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+const CodeIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
   </svg>
 );
 
-const DesktopIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+const DesktopIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
   </svg>
 );
 
-const GraduationCapIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+const GraduationCapIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422L12 7.578l-6.16 3.422L12 14z" />
@@ -167,27 +131,26 @@ const GraduationCapIcon = ({ className = "w-4 h-4" }: { className?: string }) =>
   </svg>
 );
 
-const DollarSignIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const DollarSignIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
-const GiftIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const GiftIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
   </svg>
 );
 
-const MapPinIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const MapPinIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
   </svg>
 );
 
-
-const CheckIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+const CheckIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
   </svg>
@@ -196,33 +159,32 @@ const CheckIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
 export default function CreatePostPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  
+
   // INITIALIZE SUPABASE CLIENT
   const supabase = createClient();
-  
+
   // State Management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
-  
+
   // Toast Notification System
   const [notification, setNotification] = useState<{
     type: 'success' | 'error' | 'warning';
     message: string;
   } | null>(null);
 
-  useLeafletIcons();
-
-  // ✅ FIX: Clean up any leftover Leaflet map instances before mounting
-  // Prevents "Map container is being reused by another instance" error
+  // ✅ Defensive cleanup: clear any leftover Leaflet map instances on unmount.
+  // (Mostly a StrictMode safety net; the new CreatePostMap handles its own
+  // lifecycle properly, but this stays as a belt-and-braces guard.)
   useEffect(() => {
     return () => {
-      const containers = document.querySelectorAll(".leaflet-container");
+      const containers = document.querySelectorAll('.leaflet-container');
       containers.forEach((c) => {
         if ((c as any)._leaflet_id) {
           try {
             (c as any)._leaflet_map?.remove();
             delete (c as any)._leaflet_id;
-            c.innerHTML = "";
+            c.innerHTML = '';
           } catch (e) {}
         }
       });
@@ -232,7 +194,7 @@ export default function CreatePostPage() {
   // ADD STATE FOR COMPANY DB ID
   const [companyDbId, setCompanyDbId] = useState<string>('');
   const [authUserId, setAuthUserId] = useState<string | null>(null);
-    const [showChat, setShowChat] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   // ===== Chat unread badge counts =====
   const [studentUnread, setStudentUnread] = useState(0);
   const [adminSupportUnread, setAdminSupportUnread] = useState(0);
@@ -252,18 +214,18 @@ export default function CreatePostPage() {
     workType: 'On-site',
     duration: '',
     preferredCourse: '',
-    allowance: 'Paid' 
+    allowance: 'Paid',
   });
 
   // Local state for current skill input value (FIX)
   const [currentSkillInput, setCurrentSkillInput] = useState('');
 
   // Map State - Default Center: Bacolod City
-  const [mapCenter, setMapCenter] = useState<[number, number]>([10.6633, 122.9661]); 
+  const [mapCenter, setMapCenter] = useState<[number, number]>([10.6633, 122.9661]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{display_name: string, lat: string, lon: string}>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
   const [isLocating, setIsLocating] = useState(false);
-  
+
   // Map Layer State (Standard / Grey / Satellite)
   const [mapLayer, setMapLayer] = useState<'standard' | 'grey' | 'satellite'>('standard');
 
@@ -275,9 +237,12 @@ export default function CreatePostPage() {
     const fetchCompanyData = async () => {
       try {
         setIsLoadingProfile(true);
-        
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
+
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
         if (authError || !user) {
           console.error('Not authenticated');
           showNotification('error', 'You must be logged in.');
@@ -295,7 +260,7 @@ export default function CreatePostPage() {
 
         if (error) {
           console.error('DB Error:', error.message, error.hint, error.code);
-          
+
           if (error.code === 'PGRST116') {
             console.warn('Company profile not found for user:', user.id);
           } else {
@@ -308,11 +273,11 @@ export default function CreatePostPage() {
         if (!data || !data.id) {
           console.warn('No company profile found. Redirecting to setup...');
           showNotification('warning', 'Company profile not found. Please complete your profile first.');
-          
+
           setTimeout(() => {
             router.push('/company_setup');
           }, 1500);
-          
+
           return;
         }
 
@@ -327,14 +292,13 @@ export default function CreatePostPage() {
         // Set state with verified data
         setCompanyDbId(data.id);
         setAuthUserId(user.id);
-        
-        setFormData(prev => ({
+
+        setFormData((prev) => ({
           ...prev,
-          companyName: data.company_name || 'Unnamed Company'
+          companyName: data.company_name || 'Unnamed Company',
         }));
 
         console.log('Company profile loaded successfully');
-
       } catch (err) {
         console.error('Fetch error:', err);
         showNotification('error', err instanceof Error ? err.message : 'Failed to load company profile');
@@ -347,62 +311,62 @@ export default function CreatePostPage() {
   }, []);
 
   // Helper: Show notification
-  
-// Chat unread badge — 2 separate channels (student + admin support), same as applicants page
-useEffect(() => {
-  if (!authUserId || !companyDbId) return;
 
-  const fetchStudentUnread = async () => {
-    const { data: convs } = await supabase
-      .from('conversations')
-      .select('id')
-      .or(`participant_a.eq.${authUserId},participant_b.eq.${authUserId}`);
-    const convIds = (convs || []).map((c: any) => c.id);
-    if (convIds.length === 0) {
-      setStudentUnread(0);
-      return;
-    }
-    const { count } = await supabase
-      .from('messages')
-      .select('*', { count: 'exact', head: true })
-      .in('conversation_id', convIds)
-      .neq('sender_id', authUserId)
-      .eq('is_read', false);
-    setStudentUnread(count || 0);
-  };
+  // Chat unread badge — 2 separate channels (student + admin support), same as applicants page
+  useEffect(() => {
+    if (!authUserId || !companyDbId) return;
 
-  const fetchAdminSupportUnread = async () => {
-    const { count } = await supabase
-      .from('support_messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('company_id', companyDbId)
-      .eq('sender_role', 'admin')
-      .eq('is_read', false);
-    setAdminSupportUnread(count || 0);
-  };
+    const fetchStudentUnread = async () => {
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id')
+        .or(`participant_a.eq.${authUserId},participant_b.eq.${authUserId}`);
+      const convIds = (convs || []).map((c: any) => c.id);
+      if (convIds.length === 0) {
+        setStudentUnread(0);
+        return;
+      }
+      const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .in('conversation_id', convIds)
+        .neq('sender_id', authUserId)
+        .eq('is_read', false);
+      setStudentUnread(count || 0);
+    };
 
-  fetchStudentUnread();
-  fetchAdminSupportUnread();
+    const fetchAdminSupportUnread = async () => {
+      const { count } = await supabase
+        .from('support_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyDbId)
+        .eq('sender_role', 'admin')
+        .eq('is_read', false);
+      setAdminSupportUnread(count || 0);
+    };
 
-  const studentChannel = supabase
-    .channel(`student-unread:${authUserId}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchStudentUnread)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchStudentUnread)
-    .subscribe();
+    fetchStudentUnread();
+    fetchAdminSupportUnread();
 
-  const adminSupportChannel = supabase
-    .channel(`admin-support-unread:${companyDbId}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyDbId}` }, fetchAdminSupportUnread)
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyDbId}` }, fetchAdminSupportUnread)
-    .subscribe();
+    const studentChannel = supabase
+      .channel(`student-unread:${authUserId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, fetchStudentUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, fetchStudentUnread)
+      .subscribe();
 
-  return () => {
-    supabase.removeChannel(studentChannel);
-    supabase.removeChannel(adminSupportChannel);
-  };
-}, [authUserId, companyDbId]);
+    const adminSupportChannel = supabase
+      .channel(`admin-support-unread:${companyDbId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyDbId}` }, fetchAdminSupportUnread)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages', filter: `company_id=eq.${companyDbId}` }, fetchAdminSupportUnread)
+      .subscribe();
 
-const showNotification = (type: 'success' | 'error' | 'warning', message: string) => {
+    return () => {
+      supabase.removeChannel(studentChannel);
+      supabase.removeChannel(adminSupportChannel);
+    };
+  }, [authUserId, companyDbId]);
+
+  const showNotification = (type: 'success' | 'error' | 'warning', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 4000);
   };
@@ -410,26 +374,19 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
   // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
+
     if (name === 'duration') {
       const numValue = parseInt(value, 10);
       if (numValue > 1500) return;
       if (numValue < 0) return;
     }
 
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (notification) setNotification(null);
   };
 
   // ============================================================
   // SKILL TAG INPUT — addSkill / removeSkill helpers
-  // Extracted into named functions so they can be triggered by:
-  //   - Enter / comma keydown (desktop)
-  //   - explicit "Add" button tap (mobile — many mobile keyboards
-  //     don't reliably fire e.key === 'Enter', so a visible button
-  //     is the only guaranteed way to commit a skill on phones)
-  //   - onBlur (when the user taps away to another field)
-  // All three paths call the same helper so behavior is consistent.
   // ============================================================
   const addSkill = () => {
     const value = currentSkillInput.trim();
@@ -437,13 +394,13 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
     // De-dupe: don't add the same skill twice (case-insensitive)
     const existing = formData.skills
       .split(',')
-      .map(s => s.trim().toLowerCase())
+      .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
     if (existing.includes(value.toLowerCase())) {
       setCurrentSkillInput('');
       return;
     }
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       skills: prev.skills ? `${prev.skills}, ${value}` : value,
     }));
@@ -451,15 +408,15 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
   };
 
   const removeSkillAtIndex = (index: number) => {
-    const skillsArray = formData.skills.split(',').filter(s => s.trim());
+    const skillsArray = formData.skills.split(',').filter((s) => s.trim());
     if (index < 0 || index >= skillsArray.length) return;
     skillsArray.splice(index, 1);
-    setFormData(prev => ({ ...prev, skills: skillsArray.join(', ') }));
+    setFormData((prev) => ({ ...prev, skills: skillsArray.join(', ') }));
   };
 
   // Handle Map Click (Manual Pin Drop)
   const handleMapClick = (lat: number, lng: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       latitude: lat.toFixed(6),
       longitude: lng.toFixed(6),
@@ -479,7 +436,7 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
       const data = await response.json();
       setSearchResults(data);
     } catch (error) {
-      console.error("Search error:", error);
+      console.error('Search error:', error);
     }
   };
 
@@ -495,18 +452,18 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
   };
 
   // Select a search result
-  const selectSearchResult = (result: {display_name: string, lat: string, lon: string}) => {
+  const selectSearchResult = (result: { display_name: string; lat: string; lon: string }) => {
     const lat = parseFloat(result.lat);
     const lng = parseFloat(result.lon);
-    const cityName = result.display_name.split(',').slice(0, 2).join(','); 
+    const cityName = result.display_name.split(',').slice(0, 2).join(',');
 
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       location: cityName,
       latitude: lat.toFixed(6),
       longitude: lng.toFixed(6),
     }));
-    
+
     setMapCenter([lat, lng]);
     setSearchResults([]);
     setSearchQuery('');
@@ -515,85 +472,89 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
   // Handle "Locate Me" Button
   const handleLocateMe = () => {
     if (!navigator.geolocation) {
-      showNotification('error', "Geolocation is not supported by your browser.");
+      showNotification('error', 'Geolocation is not supported by your browser.');
       return;
     }
 
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
 
-      const isWithinBounds = lat >= 9.70 && lat <= 11.10 && lng >= 122.20 && lng <= 123.60;
-      
-      if (!isWithinBounds) {
-        showNotification('warning', "You are outside Negros Occidental. Please select a location within the province.");
+        const isWithinBounds = lat >= 9.7 && lat <= 11.1 && lng >= 122.2 && lng <= 123.6;
+
+        if (!isWithinBounds) {
+          showNotification('warning', 'You are outside Negros Occidental. Please select a location within the province.');
+          setIsLocating(false);
+          return;
+        }
+
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+          const data = await response.json();
+          const locationName =
+            data.address.city || data.address.town || data.address.village || data.address.county || 'Current Location';
+
+          setFormData((prev) => ({
+            ...prev,
+            location: locationName,
+            latitude: lat.toFixed(6),
+            longitude: lng.toFixed(6),
+          }));
+        } catch (error) {
+          setFormData((prev) => ({
+            ...prev,
+            location: 'My Location',
+            latitude: lat.toFixed(6),
+            longitude: lng.toFixed(6),
+          }));
+        }
+
+        setMapCenter([lat, lng]);
         setIsLocating(false);
-        return;
+      },
+      (error) => {
+        showNotification('error', 'Unable to retrieve location. Please allow location access.');
+        setIsLocating(false);
       }
-
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-        const data = await response.json();
-        const locationName = data.address.city || data.address.town || data.address.village || data.address.county || "Current Location";
-
-        setFormData(prev => ({
-          ...prev,
-          location: locationName,
-          latitude: lat.toFixed(6),
-          longitude: lng.toFixed(6),
-        }));
-      } catch (error) {
-        setFormData(prev => ({
-          ...prev,
-          location: "My Location",
-          latitude: lat.toFixed(6),
-          longitude: lng.toFixed(6),
-        }));
-      }
-
-      setMapCenter([lat, lng]);
-      setIsLocating(false);
-    }, (error) => {
-      showNotification('error', "Unable to retrieve location. Please allow location access.");
-      setIsLocating(false);
-    });
+    );
   };
 
   // INSTANT PUBLISH - USES COMPANY DB ID (PK)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validation
     const durationNum = parseInt(formData.duration, 10);
     if (!durationNum || durationNum < 1 || durationNum > 1500) {
-      showNotification('error', "Please enter a valid duration between 1 and 1500 hours.");
+      showNotification('error', 'Please enter a valid duration between 1 and 1500 hours.');
       return;
     }
 
     if (!formData.latitude || !formData.longitude) {
-      showNotification('error', "Please select a location on the map before publishing.");
+      showNotification('error', 'Please select a location on the map before publishing.');
       return;
     }
 
     if (!formData.title.trim()) {
-      showNotification('error', "Please enter an OJT title.");
+      showNotification('error', 'Please enter an OJT title.');
       return;
     }
 
     if (!formData.description.trim()) {
-      showNotification('error', "Please enter a job description.");
+      showNotification('error', 'Please enter a job description.');
       return;
     }
 
     if (!formData.preferredCourse) {
-      showNotification('error', "Please select a preferred course.");
+      showNotification('error', 'Please select a preferred course.');
       return;
     }
 
     // Check if we have the company DB ID
     if (!companyDbId) {
-      showNotification('error', "Company profile not found. Please refresh.");
+      showNotification('error', 'Company profile not found. Please refresh.');
       return;
     }
 
@@ -601,10 +562,13 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
 
     try {
       // Step A: Get user session (for logging/verification)
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
       if (authError || !user) {
-        throw new Error("You must be logged in to publish a post.");
+        throw new Error('You must be logged in to publish a post.');
       }
 
       console.log('Publishing post...');
@@ -614,8 +578,8 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
       // Step B: Convert skills string to array
       const skillsArray = formData.skills
         .split(',')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
 
       // Allowance stays as STRING ('Paid' or 'Unpaid')
       const allowanceValue = formData.allowance;
@@ -623,11 +587,11 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
       // PAYLOAD - company_id = DB PRIMARY KEY!
       const postData = {
         company_id: companyDbId,
-        
+
         title: formData.title.trim(),
         description: formData.description.trim(),
         skills: skillsArray,
-        
+
         location_name: formData.location,
         latitude: parseFloat(formData.latitude),
         longitude: parseFloat(formData.longitude),
@@ -636,7 +600,7 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
         duration_hours: durationNum,
         allowance_type: allowanceValue,
         course_category: formData.preferredCourse,
-        
+
         status: 'active',
         created_at: new Date().toISOString(),
       };
@@ -644,30 +608,27 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
       console.log('Final Payload:', postData);
 
       // Step D: Insert into Supabase
-      const { error: insertError } = await supabase
-        .from('ojt_posts')
-        .insert([postData]);
-      
+      const { error: insertError } = await supabase.from('ojt_posts').insert([postData]);
+
       if (insertError) {
-        console.error("Insert Error:", insertError);
-        
+        console.error('Insert Error:', insertError);
+
         if (insertError.code === '23503') {
-          throw new Error("Foreign Key error: Company ID not found in companies table.");
+          throw new Error('Foreign Key error: Company ID not found in companies table.');
         }
-        
-        throw new Error(insertError.message || "Failed to save post");
+
+        throw new Error(insertError.message || 'Failed to save post');
       }
 
       // SUCCESS!
-      showNotification('success', "OJT Post published successfully!");
-      
+      showNotification('success', 'OJT Post published successfully!');
+
       setTimeout(() => {
         router.push('/company_ojtpost');
       }, 1500);
-      
     } catch (err: any) {
-      console.error("Error:", err);
-      showNotification('error', err.message || "Something went wrong.");
+      console.error('Error:', err);
+      showNotification('error', err.message || 'Something went wrong.');
     } finally {
       setIsSubmitting(false);
     }
@@ -675,29 +636,30 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased overflow-x-hidden">
-      
       {/* NOTIFICATION TOAST */}
       {notification && (
         <div className={`fixed top-4 right-4 z-[100] max-w-md animate-slide-in`}>
-          <div className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-lg border backdrop-blur-sm ${
-            notification.type === 'success' 
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-              : notification.type === 'warning'
-              ? 'bg-amber-50 border-amber-200 text-amber-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}>
+          <div
+            className={`flex items-center gap-3 px-5 py-4 rounded-xl shadow-lg border backdrop-blur-sm ${
+              notification.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : notification.type === 'warning'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}
+          >
             <span className="shrink-0 mt-0.5">
               {notification.type === 'success' && <CheckCircleIcon className="w-5 h-5 text-emerald-600" />}
               {notification.type === 'warning' && <AlertTriangleIcon className="w-5 h-5 text-amber-600" />}
               {notification.type === 'error' && <XCircleIcon className="w-5 h-5 text-red-600" />}
             </span>
             <p className="text-sm font-medium flex-1">{notification.message}</p>
-            <button 
+            <button
               onClick={() => setNotification(null)}
               className="text-current opacity-40 hover:opacity-100 transition-opacity shrink-0"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -710,7 +672,11 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
       )}
 
       {/* --- Sidebar --- */}
-      <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 overflow-y-auto`}>
+      <aside
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 transition-transform duration-300 ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 overflow-y-auto`}
+      >
         <div className="p-6 border-b border-slate-100">
           <Link href="/" className="flex items-center gap-2.5 text-xl font-bold text-slate-900">
             <OJTLogo className="w-8 h-8" />
@@ -719,52 +685,86 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
         </div>
 
         <nav className="p-4 space-y-1">
-          <Link href="/company_main" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+          <Link
+            href="/company_main"
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+          >
             Dashboard
           </Link>
-          
-          <Link href="/company_ojtpost" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+
+          <Link
+            href="/company_ojtpost"
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+          >
             My OJT Posts
           </Link>
 
-          <Link href="/company_createpost" className="flex items-center gap-3 px-4 py-3 text-white bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg font-medium shadow-sm shadow-teal-200">
+          <Link
+            href="/company_createpost"
+            className="flex items-center gap-3 px-4 py-3 text-white bg-gradient-to-r from-teal-500 to-teal-600 rounded-lg font-medium shadow-sm shadow-teal-200"
+          >
             Create Post
           </Link>
 
-          <Link href="/company_applicants" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+          <Link
+            href="/company_applicants"
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+          >
             Applicants
           </Link>
 
-          <Link href="/company_documents" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+          <Link
+            href="/company_documents"
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+          >
             Documents
           </Link>
 
-          <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors">
+          <Link
+            href="/company_settings"
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors"
+          >
             Settings
           </Link>
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100">
-           <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg font-medium transition-colors w-full">
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg font-medium transition-colors w-full"
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
             Log out
-           </button>
+          </button>
         </div>
       </aside>
 
       {/* --- Main Content --- */}
       <main className="lg:ml-64 min-h-screen w-full lg:w-[calc(100%-16rem)]">
-        
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 h-16 w-full">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-lg mr-2 shrink-0">
-                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/></svg>
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2 hover:bg-slate-100 rounded-lg mr-2 shrink-0"
+              >
+                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               </button>
               <h1 className="text-lg font-bold text-slate-800 truncate">Create Post</h1>
             </div>
             <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-              <span className="hidden sm:block text-sm text-slate-500 font-medium truncate max-w-[150px]">{formData.companyName || 'Company'}</span>
+              <span className="hidden sm:block text-sm text-slate-500 font-medium truncate max-w-[150px]">
+                {formData.companyName || 'Company'}
+              </span>
               <CompanyNotificationBell companyId={companyDbId} userId={authUserId} />
               <div className="w-9 h-9 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm border-2 border-white">
                 {formData.companyName.charAt(0)?.toUpperCase() || 'C'}
@@ -774,9 +774,10 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
         </header>
 
         <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full">
-          
-          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"
+          >
             {/* Header */}
             <div className="p-4 sm:p-6 border-b border-slate-100 bg-gradient-to-r from-teal-50 to-emerald-50">
               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -792,27 +793,28 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
             </div>
 
             <div className="p-4 sm:p-6 space-y-6">
-              
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">OJT Title <span className="text-red-500">*</span></label>
-                <input 
-                  type="text" 
-                  name="title" 
-                  placeholder="e.g. Web Developer Intern" 
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  OJT Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  placeholder="e.g. Web Developer Intern"
                   className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition ${
-                    notification?.type === 'error' && !formData.title ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
-                  }`} 
-                  value={formData.title} 
-                  onChange={handleChange} 
-                  required 
+                    notification?.type === 'error' && !formData.title
+                      ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100'
+                      : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                  }`}
+                  value={formData.title}
+                  onChange={handleChange}
+                  required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Company Name
-                </label>
-                
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Company Name</label>
+
                 <div className="relative rounded-xl border border-teal-300 bg-teal-50/50 overflow-hidden">
                   <div className="absolute left-3 top-1/2 -translate-y-1/2">
                     <CheckCircleIcon className="w-5 h-5 text-teal-600" />
@@ -833,50 +835,54 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                     </span>
                   </div>
                 </div>
-                
+
                 <p className="mt-1.5 text-xs text-slate-400">Auto-filled from your account</p>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Description <span className="text-red-500">*</span></label>
-                <textarea 
-                  name="description" 
-                  rows={5} 
-                  placeholder="Describe the internship role, responsibilities, and what the student will learn..." 
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  name="description"
+                  rows={5}
+                  placeholder="Describe the internship role, responsibilities, and what the student will learn..."
                   className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition resize-none ${
-                    notification?.type === 'error' && !formData.description ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
-                  }`} 
-                  value={formData.description} 
-                  onChange={handleChange} 
-                  required 
+                    notification?.type === 'error' && !formData.description
+                      ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100'
+                      : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                  }`}
+                  value={formData.description}
+                  onChange={handleChange}
+                  required
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                
-                {/* ENHANCED SKILLS INPUT WITH TAGS (FIXED) */}
+                {/* ENHANCED SKILLS INPUT WITH TAGS */}
                 <div>
                   <label className="flex items-center justify-between mb-2.5">
                     <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                      <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0L21 7.777M5.636 20.365l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                      <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0L21 7.777M5.636 20.365l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                        />
+                      </svg>
                       Required Skills
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-semibold rounded-md border border-slate-200">
                       OPTIONAL
                     </span>
                   </label>
-                  
+
                   <div className="relative">
-                    <div 
+                    <div
                       onClick={() => {
-                        // iOS Safari only opens the keyboard when focus() is
-                        // called synchronously inside the user-gesture handler.
-                        // document.getElementById(...).focus() works on desktop
-                        // but is flaky on iOS — use the ref-free direct call.
                         const el = document.getElementById('skills-input') as HTMLInputElement | null;
                         if (el) {
                           el.focus();
-                          // Some mobile browsers need a click too
                           if (typeof el.click === 'function') el.click();
                         }
                       }}
@@ -884,36 +890,44 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                         formData.skills ? 'border-teal-300 ring-2 ring-teal-100' : 'border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      {formData.skills.split(',').filter(s => s.trim()).map((skill, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-50 to-emerald-50 text-teal-800 text-sm font-medium rounded-lg border border-teal-200 shadow-sm animate-fade-in"
-                        >
-                          <svg className="w-3.5 h-3.5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                          {skill.trim()}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeSkillAtIndex(index);
-                            }}
-                            className="ml-0.5 p-0.5 rounded-full hover:bg-teal-200/50 transition-colors group"
+                      {formData.skills
+                        .split(',')
+                        .filter((s) => s.trim())
+                        .map((skill, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-50 to-emerald-50 text-teal-800 text-sm font-medium rounded-lg border border-teal-200 shadow-sm animate-fade-in"
                           >
-                            <svg className="w-3.5 h-3.5 text-teal-400 group-hover:text-teal-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5} strokeLinecap="round"><path d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                        </span>
-                      ))}
-                      
+                            <svg className="w-3.5 h-3.5 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            {skill.trim()}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeSkillAtIndex(index);
+                              }}
+                              className="ml-0.5 p-0.5 rounded-full hover:bg-teal-200/50 transition-colors group"
+                            >
+                              <svg
+                                className="w-3.5 h-3.5 text-teal-400 group-hover:text-teal-600 transition-colors"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                strokeWidth={2.5}
+                                strokeLinecap="round"
+                              >
+                                <path d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))}
+
                       <input
                         id="skills-input"
                         type="text"
                         name="skills"
-                        // Mobile-friendly attributes:
-                        //  - inputMode="text"     → show normal text keyboard
-                        //  - autoComplete="off"   → stop browser from inserting saved values
-                        //  - autoCapitalize="words" → skills like "Web Development" capitalize nicely
-                        //  - enterKeyHint="done"  → relabel mobile Enter key; we still handle Enter ourselves
-                        //  - spellCheck={false}   → don't autocorrect skill names mid-typing
                         inputMode="text"
                         autoComplete="off"
                         autoCapitalize="words"
@@ -923,10 +937,6 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                         value={currentSkillInput}
                         onChange={(e) => setCurrentSkillInput(e.target.value)}
                         onKeyDown={(e) => {
-                          // Accept BOTH Enter and comma as "commit skill".
-                          // Some Android keyboards fire keyCode 13 but report
-                          // e.key as 'Enter' / 'Return' / 'Send' / 'Go' —
-                          // checking both covers all of them.
                           const isCommit =
                             e.key === 'Enter' ||
                             e.key === ',' ||
@@ -938,33 +948,21 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                             return;
                           }
                           if (e.key === 'Backspace' && !currentSkillInput && formData.skills) {
-                            // Backspace on empty input removes the last tag
-                            removeSkillAtIndex(
-                              formData.skills.split(',').filter(s => s.trim()).length - 1
-                            );
+                            removeSkillAtIndex(formData.skills.split(',').filter((s) => s.trim()).length - 1);
                           }
                         }}
-                        // onBlur = mobile-friendly commit path: if the user
-                        // typed something and then tapped elsewhere on the form
-                        // (which is what most mobile users do instead of pressing
-                        // Enter), commit the skill so it's not lost.
                         onBlur={() => {
                           if (currentSkillInput.trim()) addSkill();
                         }}
                         className="flex-1 min-w-[120px] sm:min-w-[140px] outline-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 py-1"
                       />
 
-                      {/* Visible "Add" button — the actual mobile fix.
-                          Shows only when the user has typed something, so it
-                          gives phone users a guaranteed tappable way to commit
-                          a skill without relying on the mobile Enter key. */}
                       {currentSkillInput.trim() && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             addSkill();
-                            // Re-focus so the keyboard stays open for the next skill
                             setTimeout(() => {
                               const el = document.getElementById('skills-input') as HTMLInputElement | null;
                               el?.focus();
@@ -977,15 +975,22 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                         </button>
                       )}
                     </div>
-                    
+
                     <div className="flex items-center justify-between mt-2 px-1">
                       <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
                         Type a skill, then tap <strong className="font-semibold text-teal-600">Add</strong> (or press Enter)
                       </p>
                       {formData.skills && (
                         <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md">
-                          {formData.skills.split(',').filter(s => s.trim()).length} skill{formData.skills.split(',').filter(s => s.trim()).length !== 1 ? 's' : ''}
+                          {formData.skills.split(',').filter((s) => s.trim()).length} skill
+                          {formData.skills.split(',').filter((s) => s.trim()).length !== 1 ? 's' : ''}
                         </span>
                       )}
                     </div>
@@ -993,63 +998,67 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Location <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
-                    name="location" 
-                    placeholder="Search or click map below" 
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Location <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="location"
+                    placeholder="Search or click map below"
                     className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition ${
-                      notification?.type === 'error' && !formData.location ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
-                    }`} 
-                    value={formData.location} 
-                    onChange={handleChange} 
-                    required 
+                      notification?.type === 'error' && !formData.location
+                        ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100'
+                        : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                    }`}
+                    value={formData.location}
+                    onChange={handleChange}
+                    required
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Latitude</label>
-                  <input 
-                    type="text" 
-                    name="latitude" 
-                    placeholder="Auto-fills from map" 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none transition" 
-                    value={formData.latitude} 
-                    readOnly 
+                  <input
+                    type="text"
+                    name="latitude"
+                    placeholder="Auto-fills from map"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none transition"
+                    value={formData.latitude}
+                    readOnly
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Longitude</label>
-                  <input 
-                    type="text" 
-                    name="longitude" 
-                    placeholder="Auto-fills from map" 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none transition" 
-                    value={formData.longitude} 
-                    readOnly 
+                  <input
+                    type="text"
+                    name="longitude"
+                    placeholder="Auto-fills from map"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none transition"
+                    value={formData.longitude}
+                    readOnly
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Number of Vacancies</label>
-                  <input 
-                    type="number" 
-                    name="vacancies" 
-                    placeholder="e.g. 3" 
-                    min="1" 
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition" 
-                    value={formData.vacancies} 
-                    onChange={handleChange} 
+                  <input
+                    type="number"
+                    name="vacancies"
+                    placeholder="e.g. 3"
+                    min="1"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition"
+                    value={formData.vacancies}
+                    onChange={handleChange}
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Work Type</label>
-                  <select 
-                    name="workType" 
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-700 bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition appearance-none cursor-pointer" 
-                    value={formData.workType} 
+                  <select
+                    name="workType"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-700 bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition appearance-none cursor-pointer"
+                    value={formData.workType}
                     onChange={handleChange}
                   >
                     <option value="On-site">On-site</option>
@@ -1059,19 +1068,24 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Duration (Hours) <span className="text-red-500">*</span></label>
-                  <input 
-                    type="number" 
-                    name="duration" 
-                    placeholder="Min: 1, Max: 1500" 
-                    min="1" 
-                    max="1500" 
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Duration (Hours) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="duration"
+                    placeholder="Min: 1, Max: 1500"
+                    min="1"
+                    max="1500"
                     className={`w-full border rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:border-transparent outline-none transition ${
-                      notification?.type === 'error' && (!formData.duration || parseInt(formData.duration) < 1 || parseInt(formData.duration) > 1500) ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
-                    }`} 
-                    value={formData.duration} 
-                    onChange={handleChange} 
-                    required 
+                      notification?.type === 'error' &&
+                      (!formData.duration || parseInt(formData.duration) < 1 || parseInt(formData.duration) > 1500)
+                        ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100'
+                        : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                    }`}
+                    value={formData.duration}
+                    onChange={handleChange}
+                    required
                   />
                 </div>
 
@@ -1080,22 +1094,26 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Preferred Course <span className="text-red-500">*</span>
                   </label>
-                  <select 
+                  <select
                     name="preferredCourse"
                     value={formData.preferredCourse}
                     onChange={handleChange}
                     className={`w-full border rounded-xl px-4 py-3 text-slate-700 bg-white focus:ring-2 focus:border-transparent outline-none transition appearance-none cursor-pointer ${
-                      notification?.type === 'error' && !formData.preferredCourse ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100' : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
+                      notification?.type === 'error' && !formData.preferredCourse
+                        ? 'border-red-300 focus:ring-red-500 ring-2 ring-red-100'
+                        : 'border-slate-200 focus:ring-teal-500 focus:border-teal-500'
                     }`}
                     required
                   >
-                    <option value="" disabled>Select course...</option>
+                    <option value="" disabled>
+                      Select course...
+                    </option>
                     <option value="BSCS">BSCS - Bachelor of Science in Computer Science</option>
                     <option value="BSIT">BSIT - Bachelor of Science in Information Technology</option>
-                    <option value="Both">Both BSCS & BSIT</option>
+                    <option value="Both">Both BSCS &amp; BSIT</option>
                     <option value="Any IT Course">Any IT Related Course</option>
                   </select>
-                  
+
                   {formData.preferredCourse && (
                     <div className="mt-2.5 flex flex-wrap gap-2">
                       {formData.preferredCourse === 'BSCS' && (
@@ -1134,19 +1152,53 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
 
                 {/* Allowance Field */}
                 <div className="sm:col-span-2">
-                   <label className="block text-sm font-semibold text-slate-700 mb-2">Allowance Type</label>
-                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                      <label className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl cursor-pointer border-2 transition-all font-medium text-sm ${formData.allowance === 'Paid' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                        <input type="radio" name="allowance" value="Paid" checked={formData.allowance === 'Paid'} onChange={handleChange} className="sr-only" />
-                        {formData.allowance === 'Paid' ? <CheckIcon className="w-5 h-5 shrink-0 text-emerald-600" /> : <DollarSignIcon className="w-5 h-5 shrink-0 text-slate-400" />}
-                        <span>Paid / With Allowance</span>
-                      </label>
-                      <label className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl cursor-pointer border-2 transition-all font-medium text-sm ${formData.allowance === 'Unpaid' ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                        <input type="radio" name="allowance" value="Unpaid" checked={formData.allowance === 'Unpaid'} onChange={handleChange} className="sr-only" />
-                        {formData.allowance === 'Unpaid' ? <CheckIcon className="w-5 h-5 shrink-0 text-orange-600" /> : <GiftIcon className="w-5 h-5 shrink-0 text-slate-400" />}
-                        <span>Unpaid / Volunteer</span>
-                      </label>
-                   </div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Allowance Type</label>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <label
+                      className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl cursor-pointer border-2 transition-all font-medium text-sm ${
+                        formData.allowance === 'Paid'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="allowance"
+                        value="Paid"
+                        checked={formData.allowance === 'Paid'}
+                        onChange={handleChange}
+                        className="sr-only"
+                      />
+                      {formData.allowance === 'Paid' ? (
+                        <CheckIcon className="w-5 h-5 shrink-0 text-emerald-600" />
+                      ) : (
+                        <DollarSignIcon className="w-5 h-5 shrink-0 text-slate-400" />
+                      )}
+                      <span>Paid / With Allowance</span>
+                    </label>
+                    <label
+                      className={`flex-1 flex items-center justify-center gap-2.5 py-3.5 rounded-xl cursor-pointer border-2 transition-all font-medium text-sm ${
+                        formData.allowance === 'Unpaid'
+                          ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="allowance"
+                        value="Unpaid"
+                        checked={formData.allowance === 'Unpaid'}
+                        onChange={handleChange}
+                        className="sr-only"
+                      />
+                      {formData.allowance === 'Unpaid' ? (
+                        <CheckIcon className="w-5 h-5 shrink-0 text-orange-600" />
+                      ) : (
+                        <GiftIcon className="w-5 h-5 shrink-0 text-slate-400" />
+                      )}
+                      <span>Unpaid / Volunteer</span>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Embedded Map with Layer Switcher */}
@@ -1158,10 +1210,10 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                     </span>
                     <span className="text-teal-600 font-normal ml-1">(Negros Occidental Only)</span>
                   </label>
-                  
+
                   <div className="flex flex-col sm:flex-row gap-2 mb-2 w-full">
                     <div className="flex flex-1 gap-2 w-full" role="search" aria-label="Search location">
-                      <input 
+                      <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -1174,34 +1226,37 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                         placeholder="Search places in Negros Occidental..."
                         className="flex-1 min-w-0 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition"
                       />
-                      <button type="button" onClick={() => handleSearch()} className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition font-medium text-sm whitespace-nowrap shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleSearch()}
+                        className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition font-medium text-sm whitespace-nowrap shrink-0"
+                      >
                         Search
                       </button>
                     </div>
-                    
-                    <button 
-                      type="button" 
-                      onClick={handleLocateMe} 
+
+                    <button
+                      type="button"
+                      onClick={handleLocateMe}
                       disabled={isLocating}
                       className="w-full sm:w-auto px-5 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
                     >
                       {isLocating ? (
-                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                          />
+                        </svg>
                       ) : (
-                        // Clean GPS / crosshair icon. The old path data
-                        // ("M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 1v8m0 0v1")
-                        // was malformed and rendered as a random blob.
-                        // This icon: 4 directional ticks + outer ring + center dot.
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                           <circle cx="12" cy="12" r="4" strokeLinecap="round" strokeLinejoin="round" />
                           <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
                         </svg>
                       )}
-                      {/* Mobile shows short label "Locate", desktop shows full "Locate Me".
-                          The previous code had BOTH spans as `hidden sm:inline`, so on
-                          mobile the button had NO text and on desktop it rendered
-                          "Locate MeLocate". Swapped the mobile span to `sm:hidden`. */}
                       <span className="sm:hidden">Locate</span>
                       <span className="hidden sm:inline">Locate Me</span>
                     </button>
@@ -1210,13 +1265,26 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                   {searchResults.length > 0 && (
                     <div className="border border-slate-200 rounded-xl bg-white shadow-lg mb-2 max-h-48 overflow-y-auto z-20 relative">
                       {searchResults.map((result, index) => (
-                        <button 
-                          key={index} 
+                        <button
+                          key={index}
                           type="button"
                           onClick={() => selectSearchResult(result)}
                           className="w-full text-left px-4 py-3 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition text-sm text-slate-700 flex items-start gap-3"
                         >
-                          <svg className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                          <svg className="w-4 h-4 mt-0.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+            ></path>
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                            ></path>
+                          </svg>
                           <span className="break-words">{result.display_name}</span>
                         </button>
                       ))}
@@ -1224,114 +1292,115 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
                   )}
 
                   {/* MAP CONTAINER WITH LAYER SWITCHER */}
-                  <div className={`border rounded-xl overflow-hidden shadow-sm relative w-full ${notification?.type === 'error' && (!formData.latitude || !formData.longitude) ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200'}`} style={{ minHeight: '350px', height: '400px', maxHeight: '500px' }}>
-                    
+                  <div
+                    className={`border rounded-xl overflow-hidden shadow-sm relative w-full ${
+                      notification?.type === 'error' && (!formData.latitude || !formData.longitude)
+                        ? 'border-red-300 ring-2 ring-red-100'
+                        : 'border-slate-200'
+                    }`}
+                    style={{ minHeight: '350px', height: '400px', maxHeight: '500px' }}
+                  >
                     {/* LAYER SWITCHER BUTTONS */}
                     <div className="absolute top-3 right-3 z-[1000] flex gap-1.5 bg-white rounded-lg shadow-lg border border-slate-200 p-1">
                       <button
                         type="button"
                         onClick={() => setMapLayer('standard')}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'standard' ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                          mapLayer === 'standard' ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
                       >
-                        🗺 Stan
+                       🗺 Standard
                       </button>
                       <button
                         type="button"
                         onClick={() => setMapLayer('grey')}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'grey' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                          mapLayer === 'grey' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
                       >
-                        ᝰ🖌 Grey
+                       🔘 Grey
                       </button>
                       <button
                         type="button"
                         onClick={() => setMapLayer('satellite')}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${mapLayer === 'satellite' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                          mapLayer === 'satellite' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
                       >
-                        🛰 Satellite
+                       🛰️ Satellite
                       </button>
                     </div>
-                    
-                    <MapContainer key="create-post-map" center={mapCenter} zoom={13} className="h-full w-full z-10" style={{ width: '100%', height: '100%' }} scrollWheelZoom={true} zoomControl={true}>
-                      
-                      {/* DYNAMIC TILE LAYER BASED ON SELECTION */}
-                      <TileLayer 
-                        attribution='&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors' 
-                        url={
-                          mapLayer === 'standard' 
-                            ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-                            : mapLayer === 'grey'
-                            ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
-                            : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                        }
-                      />
-                      
-                      {/* LABEL OVERLAY FOR SATELLITE VIEW */}
-                      {mapLayer === 'satellite' && (
-                       // ✅ CORRECT: Removed invalid 'transparent' prop
-<TileLayer 
-  attribution='&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors' 
-  url='https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
-  zIndex={1000}
-/>
-                      )}
-                      
-                      <MapController center={mapCenter} />
-                      <LocationPicker onMapClick={handleMapClick} />
-                      
-                      {formData.latitude && formData.longitude && (
-                        <Marker position={[parseFloat(formData.latitude), parseFloat(formData.longitude)]}></Marker>
-                      )}
-                    </MapContainer>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1.5 italic">* Click on the map or use search to pin your location</p>
-                </div>
 
+                    {/* ✅ ONE dynamic component — no MapContainer/TileLayer/Marker here. */}
+                    <CreatePostMap
+                      key="create-post-map"
+                      center={mapCenter}
+                      mapLayer={mapLayer}
+                      marker={
+                        formData.latitude && formData.longitude
+                          ? { lat: parseFloat(formData.latitude), lng: parseFloat(formData.longitude) }
+                          : null
+                      }
+                      onMapClick={handleMapClick}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5 italic">
+                    * Click on the map or use search to pin your location
+                  </p>
+                </div>
               </div>
             </div>
 
             {/* Footer Actions */}
             <div className="px-4 sm:px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
-              <button 
-                type="button" 
-                onClick={() => router.back()} 
-                disabled={isSubmitting} 
+              <button
+                type="button"
+                onClick={() => router.back()}
+                disabled={isSubmitting}
                 className="px-6 py-3 border border-slate-300 text-slate-700 font-semibold rounded-xl hover:bg-slate-100 transition-all order-2 sm:order-1 disabled:opacity-50"
               >
                 Cancel
               </button>
-              
-              <button 
-                type="submit" 
+
+              <button
+                type="submit"
                 disabled={isSubmitting}
                 className="px-8 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 order-1 sm:order-2 disabled:opacity-70 disabled:cursor-not-allowed min-w-[180px]"
               >
                 {isSubmitting ? (
                   <>
                     <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
                     </svg>
                     Publishing...
                   </>
                 ) : (
-                  <>
-               
-                    Publish Instantly
-                  </>
+                  <>Publish Instantly</>
                 )}
               </button>
             </div>
-
           </form>
-          
+
           {/* Info Box */}
           <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
             <svg className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
             <div className="text-sm text-blue-700">
               <p className="font-semibold">Instant Publish Mode</p>
-              <p className="mt-0.5">Your post will be <strong>immediately visible</strong> to all students once published!</p>
+              <p className="mt-0.5">
+                Your post will be <strong>immediately visible</strong> to all students once published!
+              </p>
             </div>
           </div>
         </div>
@@ -1339,33 +1408,45 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
 
       <style jsx global>{`
         @keyframes slide-in {
-          from { opacity: 0; transform: translateX(100%); }
-          to { opacity: 1; transform: translateX(0); }
+          from {
+            opacity: 0;
+            transform: translateX(100%);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
         }
-        .animate-slide-in { animation: slide-in 0.3s ease-out; }
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
         @keyframes fade-in {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
         }
-        .animate-fade-in { animation: fade-in 0.2 ease-out; }
+        .animate-fade-in {
+          animation: fade-in 0.2s ease-out;
+        }
       `}</style>
 
-    {/* 💬 Draggable Chat Bubble — always draggable, opens chat on click */}
-{authUserId && (
-  <DraggableChatButton
-    onClick={() => setShowChat(true)}
-    unreadCount={totalChatUnread}
-    disabled={false}
-    title={`Messages${totalChatUnread > 0 ? ` · ${totalChatUnread} unread` : ''}`}
-    storageKey="company-applicants-chat-pos"
-  />
-)}
+      {/* Draggable Chat Bubble */}
+      {authUserId && (
+        <DraggableChatButton
+          onClick={() => setShowChat(true)}
+          unreadCount={totalChatUnread}
+          disabled={false}
+          title={`Messages${totalChatUnread > 0 ? ` · ${totalChatUnread} unread` : ''}`}
+          storageKey="company-applicants-chat-pos"
+        />
+      )}
 
-
-
-      {/* 💬 Company Chat Modal */}
-
-      {/*updated company create post feature*/}
+      {/* Company Chat Modal */}
       {showChat && authUserId && (
         <CompanyChat
           userId={authUserId}
@@ -1374,5 +1455,5 @@ const showNotification = (type: 'success' | 'error' | 'warning', message: string
         />
       )}
     </div>
-  );  
+  );
 }

@@ -727,7 +727,7 @@ function Sidebar({ isOpen, onClose, router }: {
         
         <div className="p-6 border-b border-slate-100">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-slate-900">
-            <span className="text-teal-600 text-2xl">◉</span> OJTly
+            <span className="text-teal-600 text-2xl"></span> OJTly
           </Link>
         </div>
 
@@ -745,9 +745,7 @@ function Sidebar({ isOpen, onClose, router }: {
             onClick={() => router.push('/')} 
             className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg font-medium w-full"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
+
             Log out
           </button>
         </div>

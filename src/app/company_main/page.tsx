@@ -499,7 +499,7 @@ useEffect(() => {
       >
         <div className="p-6 border-b border-slate-100">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-slate-900">
-            <span className="text-teal-600 text-2xl">◉</span> OJTly
+            <span className="text-teal-600 text-2xl"></span> OJTly
           </Link>
         </div>
 
@@ -532,7 +532,6 @@ useEffect(() => {
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100">
            <button onClick={() => supabase.auth.signOut().then(() => router.push('/'))} className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 rounded-lg font-medium transition-colors w-full text-red-500">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
             Log out
           </button>
         </div>

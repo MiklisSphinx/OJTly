@@ -1409,10 +1409,10 @@ export default function StudentMainPage() {
                       <span className="flex items-center gap-1.5 sm:gap-2 block text-[10px] sm:text-xs text-slate-400 mb-1 sm:mb-1.5 uppercase font-bold">
                         Vacancies
                       </span>
-                      <span className="text-base sm:text-lg font-bold text-slate-800">
+                      <span className=" text-base sm:text-lg font-bold text-slate-800">
                         {selectedPost.vacancies || 1} 
-                        <span className="text-xs sm:text-sm font-normal text-slate-500">
-                          slot{((selectedPost.vacancies || 1) > 1 ? 's' : '')}
+                        <span className="text-xs sm:text-sm font-normal  text-slate-500">
+                           {((selectedPost.vacancies || 1) > 1 ? ' slots ' : '')}
                         </span>
                       </span>
                     </div>

@@ -295,7 +295,7 @@ export default function CompanySettingsPage() {
       <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-slate-200 transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         <div className="p-6 border-b border-slate-100">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold text-slate-900">
-            <span className="text-teal-600 text-2xl">◉</span> OJTly
+            <span className="text-teal-600 text-2xl"></span> OJTly
           </Link>
         </div>
         <nav className="p-4 space-y-1">
