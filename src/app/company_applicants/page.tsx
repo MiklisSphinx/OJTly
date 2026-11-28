@@ -751,7 +751,7 @@ export default function ApplicantsPage() {
           <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg text-sm">Settings</Link>
         </nav>
         <div className="p-4 border-t border-slate-100 mt-auto">
-          <button onClick={() => router.push('/')} className="flex items-center gap-3 w-full px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg text-sm transition-colors">
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg font-medium transition-colors w-full">
             Log out
           </button>
         </div>

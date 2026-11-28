@@ -307,7 +307,7 @@ export default function CompanySettingsPage() {
           <Link href="/company_settings" className="flex items-center gap-3 px-4 py-3 text-white bg-teal-600 rounded-lg font-medium">Settings</Link>
         </nav>
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100">
-          <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg font-medium w-full">Log out</button>
+          <button onClick={() => router.push('/')} className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg font-medium transition-colors w-full">Log out</button>
         </div>
       </aside>
 
